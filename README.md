@@ -1,64 +1,82 @@
-# nvim-lua-plugin-template
+# tabgroups.nvim
 
-This repository is a template for Neovim plugins written in Lua.
+Organize Neovim tabs into named groups. Each tab belongs to a group; the tabline shows only the tabs in the current group, with all groups listed on the right.
 
-The intention is that you use this template to create a new repository where you then adapt this readme and add your plugin code.
-The template includes the following:
+## Features
 
-- GitHub workflows and configurations to run linters and tests
-- Packaging of tagged releases and upload to [LuaRocks][luarocks]
-  if a [`LUAROCKS_API_KEY`][luarocks-api-key] is added
-  to the [GitHub Actions secrets][gh-actions-secrets]
-- Minimal test setup:
-  - A `scm` [rockspec][rockspec-format], `nvim-lua-plugin-scm-1.rockspec`
-  - A `.busted` file
-- EditorConfig
-- A .luacheckrc
+- Named tab groups with persistent group IDs per session
+- Tabline shows current group's tabs on the left, all groups on the right
+- New tabs inherit the group of the tab they were opened from
+- Closing a tab returns focus to the same group
+- Interactive commands to create, rename, and move tabs between groups
 
+## Installation
 
-To get started writing a Lua plugin, I recommend reading `:help lua-guide` and
-`:help write-plugin`.
+**lazy.nvim** (from GitHub):
+```lua
+{
+  "yourusername/tabgroups.nvim",
+  config = function()
+    local tabgroups = require("tabgroups")
 
-## Scope
+    -- Options
+    vim.o.tabline = "%!v:lua.require('tabgroups').tabline()"
+    vim.o.showtabline = 2  -- 0 = never, 1 = 2+ tabs, 2 = always
 
-Anything that the majority of plugin authors will want to have is in scope of
-this starter template. Anything that is controversial is out-of-scope.
+    vim.api.nvim_set_hl(0, "TabLineDirBold", { link = "TabLineFill", bold = true })
 
-## Usage
+    -- Keymaps
+    vim.keymap.set("n", "<Tab>",   tabgroups.next_tab_in_group, { desc = "Next tab in group" })
+    vim.keymap.set("n", "<S-Tab>", tabgroups.prev_tab_in_group, { desc = "Previous tab in group" })
+    vim.keymap.set("n", "<Right>", tabgroups.next_tab_group,    { desc = "Next tab group" })
+    vim.keymap.set("n", "<Left>",  tabgroups.prev_tab_group,    { desc = "Previous tab group" })
+  end,
+}
+```
 
-- Click [Use this template][use-this-template]. Do not fork.
-- Rename `nvim-lua-plugin-scm-1.rockspec` and change the `package` name
-  to the name of your plugin.
+**lazy.nvim** (local development):
+```lua
+{
+  dir = vim.fn.expand("~/code/tabgroups.nvim"),
+  name = "tabgroups.nvim",
+  config = function()
+    -- same config block as above
+  end,
+}
+```
 
-## Template License
+## Configuration
 
-The template itself is licensed under the [MIT license](https://en.wikipedia.org/wiki/MIT_License).
-The template doesn't include a LICENSE file. You should add one after creating your repository.
+There is no `setup()` function. Configure the plugin directly in your lazy `config` function:
 
----
+- Set `vim.o.tabline` to enable the custom tabline renderer
+- Set `vim.o.showtabline` to control when the tabline is visible
+- Map the navigation functions to whatever keys you prefer
 
+## Keymaps
 
-The remainder of the README is text that can be preserved in your plugin:
+The plugin does not set any keymaps automatically. Map the public navigation functions yourself:
 
----
+| Function                        | Suggested key | Action                        |
+|---------------------------------|---------------|-------------------------------|
+| `tabgroups.next_tab_in_group()` | `<Tab>`       | Next tab in current group     |
+| `tabgroups.prev_tab_in_group()` | `<S-Tab>`     | Previous tab in current group |
+| `tabgroups.next_tab_group()`    | `<Right>`     | Next tab group                |
+| `tabgroups.prev_tab_group()`    | `<Left>`      | Previous tab group            |
 
+## Commands
+
+| Command                   | Description                                      |
+|---------------------------|--------------------------------------------------|
+| `:TabGroupNew [name]`     | Open a new tab in a new group (prompts if no name given) |
+| `:TabGroupRename [name]`  | Rename the current group (prompts if no name given) |
+| `:TabGroupMove`           | Move the current tab to a different group (interactive picker) |
 
 ## Development
 
 ### Run tests
 
-
-Running tests requires either
-
-- [luarocks][luarocks]
-- or [busted][busted] and [nlua][nlua]
-
-to be installed[^1].
-
-[^1]: The test suite assumes that `nlua` has been installed
-      using luarocks into `~/.luarocks/bin/`.
-
-You can then run:
+Requires [luarocks][luarocks] or [busted][busted] + [nlua][nlua].
 
 ```bash
 luarocks test --local
@@ -66,28 +84,18 @@ luarocks test --local
 busted
 ```
 
-Or if you want to run a single test file:
-
+Single file:
 ```bash
-luarocks test spec/path_to_file.lua --local
-# or
-busted spec/path_to_file.lua
+busted spec/tabgroups_spec.lua
 ```
 
-If you see an error like `module 'busted.runner' not found`:
-
+If you see `module 'busted.runner' not found`:
 ```bash
 eval $(luarocks path --no-bin)
 ```
 
-For this to work you need to have Lua 5.1 set as your default version for
-luarocks. If that's not the case you can pass `--lua-version 5.1` to all the
-luarocks commands above.
+Luarocks must be configured for Lua 5.1. Pass `--lua-version 5.1` if needed.
 
-[rockspec-format]: https://github.com/luarocks/luarocks/wiki/Rockspec-format
 [luarocks]: https://luarocks.org
-[luarocks-api-key]: https://luarocks.org/settings/api-keys
-[gh-actions-secrets]: https://docs.github.com/en/actions/security-guides/encrypted-secrets#creating-encrypted-secrets-for-a-repository
 [busted]: https://lunarmodules.github.io/busted/
 [nlua]: https://github.com/mfussenegger/nlua
-[use-this-template]: https://github.com/new?template_name=nvim-lua-plugin-template&template_owner=nvim-lua
