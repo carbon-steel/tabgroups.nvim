@@ -85,7 +85,7 @@ describe("group_variables", function()
 
 		it("reads from the addressed group", function()
 			local gid =
-				tabgroups._get_tab_group(vim.api.nvim_tabpage_get_number(0))
+				tabgroups.get_tab_group(vim.api.nvim_tabpage_get_number(0))
 			vim.tg.lang = "lua"
 			tabgroups.new_group("hello")
 			assert.are.same("lua", vim.tg[gid].lang)
@@ -94,7 +94,7 @@ describe("group_variables", function()
 
 		it("writes to the addressed group", function()
 			local gid =
-				tabgroups._get_tab_group(vim.api.nvim_tabpage_get_number(0))
+				tabgroups.get_tab_group(vim.api.nvim_tabpage_get_number(0))
 			tabgroups.new_group("hello")
 			vim.tg[gid].lang = "lua"
 			assert.are.same("lua", gv.get(gid, "lang"))
@@ -102,10 +102,10 @@ describe("group_variables", function()
 
 		it("addressed groups are independent", function()
 			local gid1 =
-				tabgroups._get_tab_group(vim.api.nvim_tabpage_get_number(0))
+				tabgroups.get_tab_group(vim.api.nvim_tabpage_get_number(0))
 			tabgroups.new_group("hello")
 			local gid2 =
-				tabgroups._get_tab_group(vim.api.nvim_tabpage_get_number(0))
+				tabgroups.get_tab_group(vim.api.nvim_tabpage_get_number(0))
 			vim.tg[gid1].val = "ten"
 			vim.tg[gid2].val = "twenty"
 			assert.are.same("ten", vim.tg[gid1].val)
@@ -114,13 +114,13 @@ describe("group_variables", function()
 
 		it("returns the same proxy table on repeated access", function()
 			local gid =
-				tabgroups._get_tab_group(vim.api.nvim_tabpage_get_number(0))
+				tabgroups.get_tab_group(vim.api.nvim_tabpage_get_number(0))
 			assert.are.equal(vim.tg[gid], vim.tg[gid])
 		end)
 
 		it("does not write to the current group", function()
 			local gid =
-				tabgroups._get_tab_group(vim.api.nvim_tabpage_get_number(0))
+				tabgroups.get_tab_group(vim.api.nvim_tabpage_get_number(0))
 			tabgroups.new_group("hello")
 			vim.tg[gid].x = "three"
 			assert.is_nil(vim.tg.x)
@@ -128,7 +128,7 @@ describe("group_variables", function()
 
 		it("returns fresh state after clear", function()
 			local gid =
-				tabgroups._get_tab_group(vim.api.nvim_tabpage_get_number(0))
+				tabgroups.get_tab_group(vim.api.nvim_tabpage_get_number(0))
 			vim.tg[gid].key = "before"
 			gv.clear(gid)
 			assert.is_nil(vim.tg[gid].key)

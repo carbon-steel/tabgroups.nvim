@@ -2,7 +2,7 @@ local tabgroups = require("tabgroups")
 local group_vars = require("tabgroups.group_variables")
 
 vim.tg = group_vars.make_proxy(function()
-	return tabgroups._get_tab_group(vim.fn.tabpagenr())
+	return tabgroups.get_tab_group(vim.fn.tabpagenr())
 end)
 
 vim.api.nvim_create_user_command("TabGroupMove", function()
@@ -38,7 +38,7 @@ vim.api.nvim_create_autocmd("TabEnter", {
 	group = augroup,
 	callback = function()
 		local tabnr = vim.fn.tabpagenr()
-		local gid = tabgroups._get_tab_group(tabnr)
+		local gid = tabgroups.get_tab_group(tabnr)
 		group_vars.set(gid, "_default_tab", tabnr)
 	end,
 })
@@ -49,7 +49,7 @@ local last_group_id = nil
 vim.api.nvim_create_autocmd("TabLeave", {
 	group = augroup,
 	callback = function()
-		last_group_id = tabgroups._get_tab_group(vim.fn.tabpagenr())
+		last_group_id = tabgroups.get_tab_group(vim.fn.tabpagenr())
 	end,
 })
 
@@ -73,14 +73,14 @@ vim.api.nvim_create_autocmd("TabClosed", {
 			return
 		end
 
-		local current_gid = tabgroups._get_tab_group(vim.fn.tabpagenr())
+		local current_gid = tabgroups.get_tab_group(vim.fn.tabpagenr())
 
 		if current_gid == last_group_id then
 			return
 		end
 
 		for tabnr = 1, vim.fn.tabpagenr("$") do
-			if tabgroups._get_tab_group(tabnr) == last_group_id then
+			if tabgroups.get_tab_group(tabnr) == last_group_id then
 				vim.cmd("tabnext " .. tabnr)
 				break
 			end
@@ -89,7 +89,7 @@ vim.api.nvim_create_autocmd("TabClosed", {
 		-- Clear state when the last tab of a group closes
 		local group_still_exists = false
 		for tabnr = 1, vim.fn.tabpagenr("$") do
-			if tabgroups._get_tab_group(tabnr) == last_group_id then
+			if tabgroups.get_tab_group(tabnr) == last_group_id then
 				group_still_exists = true
 				break
 			end

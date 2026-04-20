@@ -377,7 +377,7 @@ end
 
 
 -- Internal functions used by plugin/tabgroups.lua (prefixed to signal non-public API)
-M._get_tab_group = get_tab_group
+M.get_tab_group = get_tab_group
 M._set_tab_group = set_tab_group
 M._new_group_id = new_group_id
 
