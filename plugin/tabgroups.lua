@@ -32,6 +32,17 @@ vim.api.nvim_create_autocmd(
 	}
 )
 
+-- Track the most recently active tab per group so next_tab_group / prev_tab_group
+-- can return to the last-used tab rather than always the first.
+vim.api.nvim_create_autocmd("TabEnter", {
+	group = augroup,
+	callback = function()
+		local tabnr = vim.fn.tabpagenr()
+		local gid = tabgroups._get_tab_group(tabnr)
+		group_vars.set(gid, "_default_tab", tabnr)
+	end,
+})
+
 -- Track the group ID of the tab we're leaving
 local last_group_id = nil
 

@@ -1,6 +1,8 @@
 -- tabgroups.nvim: organize neovim tabs into named groups
 local M = {}
 
+local group_vars = require("tabgroups.group_variables")
+
 -- Group names: gid -> name (module-level, lives as long as nvim session)
 local group_names = {}
 
@@ -98,6 +100,15 @@ local function get_dir_display_name(cwd, max_width)
 		dir_name = "…" .. dir_name:sub(-(max_width - 1))
 	end
 	return dir_name
+end
+
+-- Return the _default_tab for a group if set and still in that group, else nil
+local function get_default_tab(gid)
+	local tabnr = group_vars.get(gid, "_default_tab")
+	if tabnr and get_tab_group(tabnr) == gid then
+		return tabnr
+	end
+	return nil
 end
 
 -- Get tabs in the current group
@@ -259,7 +270,9 @@ function M.next_tab_group()
 
 	-- Get next group (wrap around)
 	local next_group_idx = (current_group_idx % #groups) + 1
-	vim.cmd("tabnext " .. groups[next_group_idx].first_tab)
+	local next_group = groups[next_group_idx]
+	local target = get_default_tab(next_group.gid) or next_group.first_tab
+	vim.cmd("tabnext " .. target)
 end
 
 -- Cycle to the previous tab group
@@ -283,7 +296,9 @@ function M.prev_tab_group()
 
 	-- Get previous group (wrap around)
 	local prev_group_idx = ((current_group_idx - 2) % #groups) + 1
-	vim.cmd("tabnext " .. groups[prev_group_idx].first_tab)
+	local prev_group = groups[prev_group_idx]
+	local target = get_default_tab(prev_group.gid) or prev_group.first_tab
+	vim.cmd("tabnext " .. target)
 end
 
 -- Move the current tab into a selected tab group (interactive)

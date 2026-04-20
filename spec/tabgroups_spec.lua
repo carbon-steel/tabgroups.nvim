@@ -1,10 +1,13 @@
 local tabgroups
+local gv
 
 describe("tabgroups", function()
 	before_each(function()
 		-- Reload to reset module-level state (group_names table)
 		package.loaded["tabgroups"] = nil
+		package.loaded["tabgroups.group_variables"] = nil
 		tabgroups = require("tabgroups")
+		gv = require("tabgroups.group_variables")
 		vim.g.tab_group_counter = 0
 		vim.g.tab_group_new_override = nil
 		for tabnr = 1, vim.fn.tabpagenr("$") do
@@ -116,6 +119,79 @@ describe("tabgroups", function()
 		it("contains right-align separator", function()
 			local line = tabgroups.tabline()
 			assert.is_true(line:find("%%=") ~= nil or line:find("%=") ~= nil)
+		end)
+	end)
+
+	-- -------------------------------------------------------------------------
+	-- _default_tab: group navigation target
+	-- -------------------------------------------------------------------------
+	describe("_default_tab", function()
+		after_each(function()
+			while vim.fn.tabpagenr("$") > 1 do
+				vim.cmd("tabclose $")
+			end
+		end)
+
+		it("next_tab_group jumps to _default_tab when set and valid", function()
+			-- tab 1 → group 1, tabs 2+3 → group 2; _default_tab for group 2 is tab 3
+			vim.cmd("tabnew")
+			vim.cmd("tabnew")
+			vim.fn.settabvar(1, "tab_group_id", 1)
+			vim.fn.settabvar(2, "tab_group_id", 2)
+			vim.fn.settabvar(3, "tab_group_id", 2)
+			gv.set(2, "_default_tab", 3)
+			vim.cmd("tabnext 1")
+			tabgroups.next_tab_group()
+			assert.are.same(3, vim.fn.tabpagenr())
+		end)
+
+		it("next_tab_group falls back to first_tab when _default_tab not set", function()
+			vim.cmd("tabnew")
+			vim.cmd("tabnew")
+			vim.fn.settabvar(1, "tab_group_id", 1)
+			vim.fn.settabvar(2, "tab_group_id", 2)
+			vim.fn.settabvar(3, "tab_group_id", 2)
+			vim.cmd("tabnext 1")
+			tabgroups.next_tab_group()
+			assert.are.same(2, vim.fn.tabpagenr())
+		end)
+
+		it("next_tab_group falls back to first_tab when _default_tab is stale", function()
+			-- _default_tab points to a tab that now belongs to a different group
+			vim.cmd("tabnew")
+			vim.cmd("tabnew")
+			vim.fn.settabvar(1, "tab_group_id", 1)
+			vim.fn.settabvar(2, "tab_group_id", 2)
+			vim.fn.settabvar(3, "tab_group_id", 2)
+			-- tab 2 is in group 2, so setting _default_tab for group 2 to tab 1 is stale
+			gv.set(2, "_default_tab", 1)
+			vim.cmd("tabnext 1")
+			tabgroups.next_tab_group()
+			assert.are.same(2, vim.fn.tabpagenr())
+		end)
+
+		it("prev_tab_group jumps to _default_tab when set and valid", function()
+			-- tabs 1+2 → group 1, tab 3 → group 2; _default_tab for group 1 is tab 2
+			vim.cmd("tabnew")
+			vim.cmd("tabnew")
+			vim.fn.settabvar(1, "tab_group_id", 1)
+			vim.fn.settabvar(2, "tab_group_id", 1)
+			vim.fn.settabvar(3, "tab_group_id", 2)
+			gv.set(1, "_default_tab", 2)
+			vim.cmd("tabnext 3")
+			tabgroups.prev_tab_group()
+			assert.are.same(2, vim.fn.tabpagenr())
+		end)
+
+		it("prev_tab_group falls back to first_tab when _default_tab not set", function()
+			vim.cmd("tabnew")
+			vim.cmd("tabnew")
+			vim.fn.settabvar(1, "tab_group_id", 1)
+			vim.fn.settabvar(2, "tab_group_id", 1)
+			vim.fn.settabvar(3, "tab_group_id", 2)
+			vim.cmd("tabnext 3")
+			tabgroups.prev_tab_group()
+			assert.are.same(1, vim.fn.tabpagenr())
 		end)
 	end)
 end)
