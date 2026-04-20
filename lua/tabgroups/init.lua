@@ -1,8 +1,6 @@
 -- tabgroups.nvim: organize neovim tabs into named groups
 local M = {}
 
-local group_vars = require("tabgroups.group_variables")
-
 -- Group names: gid -> name (module-level, lives as long as nvim session)
 local group_names = {}
 
@@ -104,7 +102,7 @@ end
 
 -- Return the _default_tab for a group if set and still in that group, else nil
 local function get_default_tab(gid)
-	local tabnr = group_vars.get(gid, "_default_tab")
+	local tabnr = vim.tg[gid]._default_tab
 	if tabnr and get_tab_group(tabnr) == gid then
 		return tabnr
 	end

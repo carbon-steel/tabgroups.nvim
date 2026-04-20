@@ -1,13 +1,15 @@
 local tabgroups
-local gv
 
 describe("tabgroups", function()
 	before_each(function()
-		-- Reload to reset module-level state (group_names table)
+		-- Reload to reset module-level state (group_names, group_vars tables)
 		package.loaded["tabgroups"] = nil
 		package.loaded["tabgroups.group_variables"] = nil
 		tabgroups = require("tabgroups")
-		gv = require("tabgroups.group_variables")
+		local gv = require("tabgroups.group_variables")
+		vim.tg = gv.make_proxy(function()
+			return vim.fn.gettabvar(vim.fn.tabpagenr(), "tab_group_id")
+		end)
 		vim.g.tab_group_counter = 0
 		vim.g.tab_group_new_override = nil
 		for tabnr = 1, vim.fn.tabpagenr("$") do
@@ -139,7 +141,7 @@ describe("tabgroups", function()
 			vim.fn.settabvar(1, "tab_group_id", 1)
 			vim.fn.settabvar(2, "tab_group_id", 2)
 			vim.fn.settabvar(3, "tab_group_id", 2)
-			gv.set(2, "_default_tab", 3)
+			vim.tg[2]._default_tab = 3
 			vim.cmd("tabnext 1")
 			tabgroups.next_tab_group()
 			assert.are.same(3, vim.fn.tabpagenr())
@@ -164,7 +166,7 @@ describe("tabgroups", function()
 			vim.fn.settabvar(2, "tab_group_id", 2)
 			vim.fn.settabvar(3, "tab_group_id", 2)
 			-- tab 2 is in group 2, so setting _default_tab for group 2 to tab 1 is stale
-			gv.set(2, "_default_tab", 1)
+			vim.tg[2]._default_tab = 1
 			vim.cmd("tabnext 1")
 			tabgroups.next_tab_group()
 			assert.are.same(2, vim.fn.tabpagenr())
@@ -177,7 +179,7 @@ describe("tabgroups", function()
 			vim.fn.settabvar(1, "tab_group_id", 1)
 			vim.fn.settabvar(2, "tab_group_id", 1)
 			vim.fn.settabvar(3, "tab_group_id", 2)
-			gv.set(1, "_default_tab", 2)
+			vim.tg[1]._default_tab = 2
 			vim.cmd("tabnext 3")
 			tabgroups.prev_tab_group()
 			assert.are.same(2, vim.fn.tabpagenr())

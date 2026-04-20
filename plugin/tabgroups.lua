@@ -39,7 +39,7 @@ vim.api.nvim_create_autocmd("TabEnter", {
 	callback = function()
 		local tabnr = vim.fn.tabpagenr()
 		local gid = tabgroups.get_tab_group(tabnr)
-		group_vars.set(gid, "_default_tab", tabnr)
+		vim.tg[gid]._default_tab = tabnr
 	end,
 })
 
@@ -95,7 +95,7 @@ vim.api.nvim_create_autocmd("TabClosed", {
 			end
 		end
 		if not group_still_exists then
-			group_vars.clear(last_group_id)
+			vim.tg.clear(last_group_id)
 		end
 	end,
 })
