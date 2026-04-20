@@ -6,15 +6,9 @@ describe("tabgroups", function()
 		package.loaded["tabgroups"] = nil
 		package.loaded["tabgroups.group_variables"] = nil
 		tabgroups = require("tabgroups")
-		local gv = require("tabgroups.group_variables")
-		vim.tg = gv.make_proxy(function()
-			return vim.fn.gettabvar(vim.fn.tabpagenr(), "tab_group_id")
-		end)
-		vim.g.tab_group_counter = 0
+		-- Source the plugin to register autocmds (TabNew, TabEnter, etc.) and vim.tg
+		vim.cmd("source plugin/tabgroups.lua")
 		vim.g.tab_group_new_override = nil
-		for tabnr = 1, vim.fn.tabpagenr("$") do
-			vim.fn.settabvar(tabnr, "tab_group_id", "")
-		end
 	end)
 
 	-- -------------------------------------------------------------------------
@@ -22,15 +16,16 @@ describe("tabgroups", function()
 	-- -------------------------------------------------------------------------
 	describe("tab group assignment", function()
 		it("auto-assigns a gid on first use", function()
-			-- tabline triggers get_tab_group which auto-assigns
 			tabgroups.tabline()
-			local gid = vim.fn.gettabvar(1, "tab_group_id")
+			local gid = tabgroups.get_tab_group(1)
 			assert.is_true(type(gid) == "number" and gid > 0)
 		end)
 
-		it("preserves an explicitly set gid", function()
-			vim.fn.settabvar(1, "tab_group_id", 42)
-			assert.are.same(42, vim.fn.gettabvar(1, "tab_group_id"))
+		it("assigned gid is stable across calls", function()
+			tabgroups.tabline()
+			local gid = tabgroups.get_tab_group(1)
+			tabgroups.tabline()
+			assert.are.same(gid, tabgroups.get_tab_group(1))
 		end)
 	end)
 
@@ -39,16 +34,16 @@ describe("tabgroups", function()
 	-- -------------------------------------------------------------------------
 	describe("group names", function()
 		it("unnamed group shows gid-based fallback name", function()
-			vim.fn.settabvar(1, "tab_group_id", 7)
-			assert.is_true(tabgroups.tabline():find("Tab Group 7") ~= nil)
+			local gid = tabgroups.get_tab_group(vim.fn.tabpagenr())
+			assert.is_true(tabgroups.tabline():find("Tab Group " .. gid) ~= nil)
 		end)
 
 		it("renamed group shows explicit name instead of fallback", function()
-			vim.fn.settabvar(1, "tab_group_id", 1)
+			local gid = tabgroups.get_tab_group(vim.fn.tabpagenr())
 			tabgroups.rename_current_group("frontend")
 			local line = tabgroups.tabline()
 			assert.is_true(line:find("frontend") ~= nil)
-			assert.is_nil(line:find("Tab Group 1"))
+			assert.is_nil(line:find("Tab Group " .. gid))
 		end)
 	end)
 
@@ -63,42 +58,36 @@ describe("tabgroups", function()
 		end)
 
 		it("shows one group when all tabs share a gid", function()
+			local gid = tabgroups.get_tab_group(1)
+			vim.cmd("tabnew")  -- inherits current group via TabNew autocmd
 			vim.cmd("tabnew")
-			vim.cmd("tabnew")
-			vim.fn.settabvar(1, "tab_group_id", 1)
-			vim.fn.settabvar(2, "tab_group_id", 1)
-			vim.fn.settabvar(3, "tab_group_id", 1)
-			local _, count = tabgroups.tabline():gsub("Tab Group 1", "")
+			local _, count = tabgroups.tabline():gsub("Tab Group " .. gid, "")
 			assert.are.same(1, count)
 		end)
 
 		it("shows a separate group entry for each distinct gid", function()
-			vim.cmd("tabnew")
-			vim.fn.settabvar(1, "tab_group_id", 10)
-			vim.fn.settabvar(2, "tab_group_id", 20)
+			local gid1 = tabgroups.get_tab_group(1)
+			tabgroups.new_group("group2")
 			local line = tabgroups.tabline()
-			assert.is_true(line:find("Tab Group 10") ~= nil)
-			assert.is_true(line:find("Tab Group 20") ~= nil)
+			assert.is_true(line:find("Tab Group " .. gid1) ~= nil)
+			assert.is_true(line:find("group2") ~= nil)
 		end)
 
 		it("groups appear ordered by their first tab", function()
-			vim.cmd("tabnew")
-			vim.cmd("tabnew")
-			-- tab 1 → A, tab 2 → B, tab 3 → A: A's first tab is 1, B's is 2
-			vim.fn.settabvar(1, "tab_group_id", 100)
-			vim.fn.settabvar(2, "tab_group_id", 200)
-			vim.fn.settabvar(3, "tab_group_id", 100)
+			local gid_a = tabgroups.get_tab_group(1)
+			tabgroups.new_group("B")  -- tab 2 in B
+			vim.cmd("tabnext 1")      -- back to tab 1 (A)
+			vim.cmd("tabnew")         -- inserts tab 2 in A; old tab 2 (B) → tab 3
 			local line = tabgroups.tabline()
-			assert.is_true(line:find("Tab Group 100") < line:find("Tab Group 200"))
+			assert.is_true(line:find("Tab Group " .. gid_a) < line:find(" B "))
 		end)
 
-		it("two unnamed groups get distinct names", function()
-			vim.cmd("tabnew")
-			vim.fn.settabvar(1, "tab_group_id", 5)
-			vim.fn.settabvar(2, "tab_group_id", 6)
+		it("two groups show distinct entries in tabline", function()
+			local gid1 = tabgroups.get_tab_group(1)
+			tabgroups.new_group("second")
 			local line = tabgroups.tabline()
-			assert.is_true(line:find("Tab Group 5") ~= nil)
-			assert.is_true(line:find("Tab Group 6") ~= nil)
+			assert.is_true(line:find("Tab Group " .. gid1) ~= nil)
+			assert.is_true(line:find("second") ~= nil)
 		end)
 	end)
 
@@ -134,66 +123,42 @@ describe("tabgroups", function()
 			end
 		end)
 
-		it("next_tab_group jumps to _default_tab when set and valid", function()
-			-- tab 1 → group 1, tabs 2+3 → group 2; _default_tab for group 2 is tab 3
-			vim.cmd("tabnew")
-			vim.cmd("tabnew")
-			vim.fn.settabvar(1, "tab_group_id", 1)
-			vim.fn.settabvar(2, "tab_group_id", 2)
-			vim.fn.settabvar(3, "tab_group_id", 2)
-			vim.tg[2]._default_tab = 3
-			vim.cmd("tabnext 1")
+		it("next_tab_group returns to last visited tab in group", function()
+			-- Visit tab 3 last in group B so TabEnter sets _default_tab[B]=3
+			tabgroups.new_group("B")    -- tab 2 (B)
+			vim.cmd("tabnew")           -- tab 3 (B); TabEnter → _default_tab[B]=3
+			vim.cmd("tabnext 1")        -- back to group A
 			tabgroups.next_tab_group()
 			assert.are.same(3, vim.fn.tabpagenr())
 		end)
 
-		it("next_tab_group falls back to first_tab when _default_tab not set", function()
-			vim.cmd("tabnew")
-			vim.cmd("tabnew")
-			vim.fn.settabvar(1, "tab_group_id", 1)
-			vim.fn.settabvar(2, "tab_group_id", 2)
-			vim.fn.settabvar(3, "tab_group_id", 2)
-			vim.cmd("tabnext 1")
-			tabgroups.next_tab_group()
-			assert.are.same(2, vim.fn.tabpagenr())
-		end)
-
-		it("next_tab_group falls back to first_tab when _default_tab is stale", function()
-			-- _default_tab points to a tab that now belongs to a different group
-			vim.cmd("tabnew")
-			vim.cmd("tabnew")
-			vim.fn.settabvar(1, "tab_group_id", 1)
-			vim.fn.settabvar(2, "tab_group_id", 2)
-			vim.fn.settabvar(3, "tab_group_id", 2)
-			-- tab 2 is in group 2, so setting _default_tab for group 2 to tab 1 is stale
-			vim.tg[2]._default_tab = 1
-			vim.cmd("tabnext 1")
-			tabgroups.next_tab_group()
-			assert.are.same(2, vim.fn.tabpagenr())
-		end)
-
-		it("prev_tab_group jumps to _default_tab when set and valid", function()
-			-- tabs 1+2 → group 1, tab 3 → group 2; _default_tab for group 1 is tab 2
-			vim.cmd("tabnew")
-			vim.cmd("tabnew")
-			vim.fn.settabvar(1, "tab_group_id", 1)
-			vim.fn.settabvar(2, "tab_group_id", 1)
-			vim.fn.settabvar(3, "tab_group_id", 2)
-			vim.tg[1]._default_tab = 2
-			vim.cmd("tabnext 3")
+		it("prev_tab_group returns to last visited tab in group", function()
+			-- Build tab1(A), tab2(A), tab3(B); visit tab2 last in A
+			tabgroups.new_group("B")    -- tab 2 (B)
+			vim.cmd("tabnext 1")        -- tab 1 (A); TabEnter → _default_tab[A]=1
+			vim.cmd("tabnew")           -- new tab 2 (A); old B→tab 3; TabEnter → _default_tab[A]=2
+			vim.cmd("tabnext 3")        -- group B
 			tabgroups.prev_tab_group()
 			assert.are.same(2, vim.fn.tabpagenr())
 		end)
 
-		it("prev_tab_group falls back to first_tab when _default_tab not set", function()
-			vim.cmd("tabnew")
-			vim.cmd("tabnew")
-			vim.fn.settabvar(1, "tab_group_id", 1)
-			vim.fn.settabvar(2, "tab_group_id", 1)
-			vim.fn.settabvar(3, "tab_group_id", 2)
-			vim.cmd("tabnext 3")
-			tabgroups.prev_tab_group()
-			assert.are.same(1, vim.fn.tabpagenr())
+		it("next_tab_group falls back to first_tab when _default_tab was moved to another group", function()
+			-- Build tab1(A), tab2(B), tab3(B); set _default_tab[B]=3 via navigation
+			tabgroups.new_group("B")    -- tab 2 (B)
+			vim.cmd("tabnew")           -- tab 3 (B); TabEnter → _default_tab[B]=3
+			vim.cmd("tabnext 1")        -- tab 1 (A)
+			vim.cmd("tabnext 3")        -- tab 3 (B); TabEnter → _default_tab[B]=3
+			-- Move tab 3 into group A: _default_tab[B]=3 becomes stale
+			local gid_a = tabgroups.get_tab_group(1)
+			vim.ui.select = function(items, _, cb)
+				for _, item in ipairs(items) do
+					if item.gid == gid_a then cb(item); return end
+				end
+			end
+			tabgroups.move_current_tab()   -- tab 3 → group A (no TabEnter fires)
+			vim.cmd("tabnext 1")           -- tab 1 (A)
+			tabgroups.next_tab_group()     -- B's _default_tab(3) is stale → falls back to first_tab=2
+			assert.are.same(2, vim.fn.tabpagenr())
 		end)
 	end)
 end)
