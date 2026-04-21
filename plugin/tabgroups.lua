@@ -37,9 +37,7 @@ vim.api.nvim_create_autocmd(
 vim.api.nvim_create_autocmd("TabEnter", {
 	group = augroup,
 	callback = function()
-		local tabnr = vim.fn.tabpagenr()
-		local gid = tabgroups.get_tab_group(tabnr)
-		vim.tg[gid]._default_tab = tabnr
+		vim.tg._default_tab = vim.fn.tabpagenr()
 	end,
 })
 
