@@ -71,16 +71,18 @@ local function is_tab_modified(tabnr)
 	return false
 end
 
--- Get all unique tab groups (by group ID) and their first tab
+-- Get all unique tab groups (by group ID), ordered by first tab position.
+-- first_tab (position) is kept for tabline click targets; first_handle for navigation.
 local function get_tab_groups()
-	local groups = {} -- ordered list of { gid, first_tab }
+	local groups = {}
 	local seen_gids = {}
 
-	for tabnr = 1, vim.fn.tabpagenr("$") do
+	for _, handle in ipairs(vim.api.nvim_list_tabpages()) do
+		local tabnr = vim.api.nvim_tabpage_get_number(handle)
 		local gid = get_tab_group(tabnr)
 		if not seen_gids[gid] then
 			seen_gids[gid] = true
-			table.insert(groups, { gid = gid, first_tab = tabnr })
+			table.insert(groups, { gid = gid, first_tab = tabnr, first_handle = handle })
 		end
 	end
 
@@ -100,25 +102,28 @@ local function get_dir_display_name(cwd, max_width)
 	return dir_name
 end
 
--- Return the _default_tab for a group if set and still in that group, else nil
+-- Return the _default_tab handle for a group if valid and still in that group, else nil
 local function get_default_tab(gid)
-	local tabnr = vim.tg[gid]._default_tab
-	if tabnr and get_tab_group(tabnr) == gid then
-		return tabnr
+	local handle = vim.tg[gid]._default_tab
+	if handle
+		and vim.api.nvim_tabpage_is_valid(handle)
+		and get_tab_group(vim.api.nvim_tabpage_get_number(handle)) == gid
+	then
+		return handle
 	end
 	return nil
 end
 
--- Get tabs in the current group
+-- Get handles of all tabs in the current group
 local function get_tabs_in_group()
 	local current_gid = get_tab_group(vim.fn.tabpagenr())
-	local matching_tabs = {}
-	for tabnr = 1, vim.fn.tabpagenr("$") do
-		if get_tab_group(tabnr) == current_gid then
-			table.insert(matching_tabs, tabnr)
+	local matching = {}
+	for _, handle in ipairs(vim.api.nvim_list_tabpages()) do
+		if get_tab_group(vim.api.nvim_tabpage_get_number(handle)) == current_gid then
+			table.insert(matching, handle)
 		end
 	end
-	return matching_tabs
+	return matching
 end
 
 -- Build the custom tabline
@@ -203,48 +208,44 @@ end
 
 -- Cycle to the next tab within the current tab group
 function M.next_tab_in_group()
-	local current_tab = vim.fn.tabpagenr()
-	local matching_tabs = get_tabs_in_group()
+	local current_handle = vim.api.nvim_get_current_tabpage()
+	local matching = get_tabs_in_group()
 
-	if #matching_tabs <= 1 then
+	if #matching <= 1 then
 		return
 	end
 
-	-- Find current tab index within the group
 	local current_idx = 1
-	for i, tabnr in ipairs(matching_tabs) do
-		if tabnr == current_tab then
+	for i, handle in ipairs(matching) do
+		if handle == current_handle then
 			current_idx = i
 			break
 		end
 	end
 
-	-- Get next tab in group (wrap around)
-	local next_idx = (current_idx % #matching_tabs) + 1
-	vim.cmd("tabnext " .. matching_tabs[next_idx])
+	local next_idx = (current_idx % #matching) + 1
+	vim.api.nvim_set_current_tabpage(matching[next_idx])
 end
 
 -- Cycle to the previous tab within the current tab group
 function M.prev_tab_in_group()
-	local current_tab = vim.fn.tabpagenr()
-	local matching_tabs = get_tabs_in_group()
+	local current_handle = vim.api.nvim_get_current_tabpage()
+	local matching = get_tabs_in_group()
 
-	if #matching_tabs <= 1 then
+	if #matching <= 1 then
 		return
 	end
 
-	-- Find current tab index within the group
 	local current_idx = 1
-	for i, tabnr in ipairs(matching_tabs) do
-		if tabnr == current_tab then
+	for i, handle in ipairs(matching) do
+		if handle == current_handle then
 			current_idx = i
 			break
 		end
 	end
 
-	-- Get previous tab in group (wrap around)
-	local prev_idx = ((current_idx - 2) % #matching_tabs) + 1
-	vim.cmd("tabnext " .. matching_tabs[prev_idx])
+	local prev_idx = ((current_idx - 2) % #matching) + 1
+	vim.api.nvim_set_current_tabpage(matching[prev_idx])
 end
 
 -- Cycle to the next tab group
@@ -269,8 +270,8 @@ function M.next_tab_group()
 	-- Get next group (wrap around)
 	local next_group_idx = (current_group_idx % #groups) + 1
 	local next_group = groups[next_group_idx]
-	local target = get_default_tab(next_group.gid) or next_group.first_tab
-	vim.cmd("tabnext " .. target)
+	local target = get_default_tab(next_group.gid) or next_group.first_handle
+	vim.api.nvim_set_current_tabpage(target)
 end
 
 -- Cycle to the previous tab group
@@ -295,8 +296,8 @@ function M.prev_tab_group()
 	-- Get previous group (wrap around)
 	local prev_group_idx = ((current_group_idx - 2) % #groups) + 1
 	local prev_group = groups[prev_group_idx]
-	local target = get_default_tab(prev_group.gid) or prev_group.first_tab
-	vim.cmd("tabnext " .. target)
+	local target = get_default_tab(prev_group.gid) or prev_group.first_handle
+	vim.api.nvim_set_current_tabpage(target)
 end
 
 -- Move the current tab into a selected tab group (interactive)

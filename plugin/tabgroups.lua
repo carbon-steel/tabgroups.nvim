@@ -37,7 +37,7 @@ vim.api.nvim_create_autocmd(
 vim.api.nvim_create_autocmd("TabEnter", {
 	group = augroup,
 	callback = function()
-		vim.tg._default_tab = vim.fn.tabpagenr()
+		vim.tg._default_tab = vim.api.nvim_get_current_tabpage()
 	end,
 })
 
@@ -77,17 +77,17 @@ vim.api.nvim_create_autocmd("TabClosed", {
 			return
 		end
 
-		for tabnr = 1, vim.fn.tabpagenr("$") do
-			if tabgroups.get_tab_group(tabnr) == last_group_id then
-				vim.cmd("tabnext " .. tabnr)
+		for _, handle in ipairs(vim.api.nvim_list_tabpages()) do
+			if tabgroups.get_tab_group(vim.api.nvim_tabpage_get_number(handle)) == last_group_id then
+				vim.api.nvim_set_current_tabpage(handle)
 				break
 			end
 		end
 
 		-- Clear state when the last tab of a group closes
 		local group_still_exists = false
-		for tabnr = 1, vim.fn.tabpagenr("$") do
-			if tabgroups.get_tab_group(tabnr) == last_group_id then
+		for _, handle in ipairs(vim.api.nvim_list_tabpages()) do
+			if tabgroups.get_tab_group(vim.api.nvim_tabpage_get_number(handle)) == last_group_id then
 				group_still_exists = true
 				break
 			end
