@@ -1,8 +1,9 @@
 local tabgroups = require("tabgroups")
 local group_vars = require("tabgroups.group_variables")
+local internal = require("tabgroups.internal")
 
 vim.tg = group_vars.make_proxy(function()
-	return tabgroups.get_tab_group(vim.fn.tabpagenr())
+	return tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 end)
 
 vim.api.nvim_create_user_command("TabGroupMove", function()
@@ -41,25 +42,27 @@ vim.api.nvim_create_autocmd("TabEnter", {
 	end,
 })
 
--- Track the group ID of the tab we're leaving
+-- Track the group ID and handle of the tab we're leaving
 local last_group_id = nil
+local last_handle = nil
 
 vim.api.nvim_create_autocmd("TabLeave", {
 	group = augroup,
 	callback = function()
-		last_group_id = tabgroups.get_tab_group(vim.fn.tabpagenr())
+		last_handle = vim.api.nvim_get_current_tabpage()
+		last_group_id = tabgroups.get_tab_group(last_handle)
 	end,
 })
 
 -- New tabs inherit the group of the tab they were opened from
--- (TabGroupNew overrides this via vim.g.tab_group_new_override)
+-- (TabGroupNew overrides this via internal.new_group_override)
 vim.api.nvim_create_autocmd("TabNew", {
 	group = augroup,
 	callback = function()
-		local gid = vim.g.tab_group_new_override
+		local gid = internal.new_group_override
 			or last_group_id
 			or tabgroups._new_group_id()
-		tabgroups._set_tab_group(vim.fn.tabpagenr(), gid)
+		tabgroups._set_tab_group(vim.api.nvim_get_current_tabpage(), gid)
 	end,
 })
 
@@ -67,18 +70,23 @@ vim.api.nvim_create_autocmd("TabNew", {
 vim.api.nvim_create_autocmd("TabClosed", {
 	group = augroup,
 	callback = function()
+		-- Remove the closed tab's group entry
+		if last_handle then
+			tabgroups._set_tab_group(last_handle, nil)
+		end
+
 		if not last_group_id then
 			return
 		end
 
-		local current_gid = tabgroups.get_tab_group(vim.fn.tabpagenr())
+		local current_gid = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 
 		if current_gid == last_group_id then
 			return
 		end
 
 		for _, handle in ipairs(vim.api.nvim_list_tabpages()) do
-			if tabgroups.get_tab_group(vim.api.nvim_tabpage_get_number(handle)) == last_group_id then
+			if tabgroups.get_tab_group(handle) == last_group_id then
 				vim.api.nvim_set_current_tabpage(handle)
 				break
 			end
@@ -87,7 +95,7 @@ vim.api.nvim_create_autocmd("TabClosed", {
 		-- Clear state when the last tab of a group closes
 		local group_still_exists = false
 		for _, handle in ipairs(vim.api.nvim_list_tabpages()) do
-			if tabgroups.get_tab_group(vim.api.nvim_tabpage_get_number(handle)) == last_group_id then
+			if tabgroups.get_tab_group(handle) == last_group_id then
 				group_still_exists = true
 				break
 			end

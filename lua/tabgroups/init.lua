@@ -1,8 +1,12 @@
 -- tabgroups.nvim: organize neovim tabs into named groups
 local M = {}
+local internal = require("tabgroups.internal")
 
 -- Group names: gid -> name (module-level, lives as long as nvim session)
 local group_names = {}
+
+-- Tab group assignments: handle -> gid
+local tab_groups = {}
 
 local function get_group_name(gid)
 	return group_names[gid]
@@ -20,18 +24,18 @@ local function new_group_id()
 end
 
 -- Get group ID for a tab (auto-assigns one if not set)
-local function get_tab_group(tabnr)
-	local gid = vim.fn.gettabvar(tabnr, "tab_group_id", "")
-	if gid == "" then
+local function get_tab_group(handle)
+	local gid = tab_groups[handle]
+	if not gid then
 		gid = new_group_id()
-		vim.fn.settabvar(tabnr, "tab_group_id", gid)
+		tab_groups[handle] = gid
 	end
 	return gid
 end
 
--- Set group ID for a tab
-local function set_tab_group(tabnr, gid)
-	vim.fn.settabvar(tabnr, "tab_group_id", gid)
+-- Set group ID for a tab (nil removes the entry)
+local function set_tab_group(handle, gid)
+	tab_groups[handle] = gid
 end
 
 -- Get the working directory for a given tab (used for display only)
@@ -72,17 +76,15 @@ local function is_tab_modified(tabnr)
 end
 
 -- Get all unique tab groups (by group ID), ordered by first tab position.
--- first_tab (position) is kept for tabline click targets; first_handle for navigation.
 local function get_tab_groups()
 	local groups = {}
 	local seen_gids = {}
 
 	for _, handle in ipairs(vim.api.nvim_list_tabpages()) do
-		local tabnr = vim.api.nvim_tabpage_get_number(handle)
-		local gid = get_tab_group(tabnr)
+		local gid = get_tab_group(handle)
 		if not seen_gids[gid] then
 			seen_gids[gid] = true
-			table.insert(groups, { gid = gid, first_tab = tabnr, first_handle = handle })
+			table.insert(groups, { gid = gid, first_handle = handle })
 		end
 	end
 
@@ -107,7 +109,7 @@ local function get_default_tab(gid)
 	local handle = vim.tg[gid]._default_tab
 	if handle
 		and vim.api.nvim_tabpage_is_valid(handle)
-		and get_tab_group(vim.api.nvim_tabpage_get_number(handle)) == gid
+		and get_tab_group(handle) == gid
 	then
 		return handle
 	end
@@ -116,10 +118,10 @@ end
 
 -- Get handles of all tabs in the current group
 local function get_tabs_in_group()
-	local current_gid = get_tab_group(vim.fn.tabpagenr())
+	local current_gid = get_tab_group(vim.api.nvim_get_current_tabpage())
 	local matching = {}
 	for _, handle in ipairs(vim.api.nvim_list_tabpages()) do
-		if get_tab_group(vim.api.nvim_tabpage_get_number(handle)) == current_gid then
+		if get_tab_group(handle) == current_gid then
 			table.insert(matching, handle)
 		end
 	end
@@ -129,22 +131,22 @@ end
 -- Build the custom tabline
 function M.tabline()
 	local s = ""
-	local current_tab = vim.fn.tabpagenr()
-	local current_gid = get_tab_group(current_tab)
-	local total_tabs = vim.fn.tabpagenr("$")
+	local current_handle = vim.api.nvim_get_current_tabpage()
+	local current_gid = get_tab_group(current_handle)
 
-	-- Collect tabs in the current group
-	local matching_tabs = {}
+	-- Collect handles of tabs in the current group
+	local matching_handles = {}
 
-	for tabnr = 1, total_tabs do
-		if get_tab_group(tabnr) == current_gid then
-			table.insert(matching_tabs, tabnr)
+	for _, handle in ipairs(vim.api.nvim_list_tabpages()) do
+		if get_tab_group(handle) == current_gid then
+			table.insert(matching_handles, handle)
 		end
 	end
 
 	-- LEFT SIDE: Tabs of the current tab group
-	for i, tabnr in ipairs(matching_tabs) do
-		local is_current = (tabnr == current_tab)
+	for i, handle in ipairs(matching_handles) do
+		local tabnr = vim.api.nvim_tabpage_get_number(handle)
+		local is_current = (handle == current_handle)
 		local label = get_tab_label(tabnr)
 		local modified = is_tab_modified(tabnr) and " ●" or ""
 
@@ -162,7 +164,7 @@ function M.tabline()
 		s = s .. " " .. label .. modified .. " "
 
 		-- Add separator between tabs (not after the last one)
-		if i < #matching_tabs then
+		if i < #matching_handles then
 			s = s .. "%#TabLineFill#│"
 		end
 	end
@@ -194,7 +196,7 @@ function M.tabline()
 		end
 
 		-- Clickable (jumps to first tab in group)
-		s = s .. "%" .. group.first_tab .. "T"
+		s = s .. "%" .. vim.api.nvim_tabpage_get_number(group.first_handle) .. "T"
 
 		-- Group content
 		s = s .. " " .. dir_name .. " "
@@ -250,7 +252,7 @@ end
 
 -- Cycle to the next tab group
 function M.next_tab_group()
-	local current_gid = get_tab_group(vim.fn.tabpagenr())
+	local current_gid = get_tab_group(vim.api.nvim_get_current_tabpage())
 	local groups = get_tab_groups()
 
 	if #groups <= 1 then
@@ -276,7 +278,7 @@ end
 
 -- Cycle to the previous tab group
 function M.prev_tab_group()
-	local current_gid = get_tab_group(vim.fn.tabpagenr())
+	local current_gid = get_tab_group(vim.api.nvim_get_current_tabpage())
 	local groups = get_tab_groups()
 
 	if #groups <= 1 then
@@ -300,10 +302,22 @@ function M.prev_tab_group()
 	vim.api.nvim_set_current_tabpage(target)
 end
 
--- Move the current tab into a selected tab group (interactive)
-function M.move_current_tab()
-	local current_tab = vim.fn.tabpagenr()
-	local current_gid = get_tab_group(current_tab)
+-- Move the current tab into a selected tab group.
+-- If gid is provided, move directly; otherwise prompt interactively.
+function M.move_current_tab(gid)
+	local current_handle = vim.api.nvim_get_current_tabpage()
+	local current_gid = get_tab_group(current_handle)
+
+	local function apply(target_gid)
+		set_tab_group(current_handle, target_gid)
+		vim.cmd("redrawtabline")
+	end
+
+	if gid then
+		apply(gid)
+		return
+	end
+
 	local groups = get_tab_groups()
 
 	-- Build display items (exclude current group); prepend "New Group" option
@@ -313,7 +327,7 @@ function M.move_current_tab()
 			table.insert(items, {
 				gid = group.gid,
 				label = get_group_name(group.gid)
-					or get_dir_display_name(get_tab_cwd(group.first_tab), 40),
+					or get_dir_display_name(get_tab_cwd(vim.api.nvim_tabpage_get_number(group.first_handle)), 40),
 			})
 		end
 	end
@@ -327,9 +341,7 @@ function M.move_current_tab()
 		if not choice then
 			return
 		end
-		local gid = choice.gid or new_group_id()
-		set_tab_group(current_tab, gid)
-		vim.cmd("redrawtabline")
+		apply(choice.gid or new_group_id())
 	end)
 end
 
@@ -337,9 +349,9 @@ end
 function M.new_group(name)
 	local gid = new_group_id()
 	local function create_tab()
-		vim.g.tab_group_new_override = gid
+		internal.new_group_override = gid
 		vim.cmd("tabnew")
-		vim.g.tab_group_new_override = nil
+		internal.new_group_override = nil
 		if name then
 			set_group_name(gid, name)
 		end
@@ -359,7 +371,7 @@ end
 
 -- Rename the current tab group; name can be passed directly or prompted
 function M.rename_current_group(name)
-	local gid = get_tab_group(vim.fn.tabpagenr())
+	local gid = get_tab_group(vim.api.nvim_get_current_tabpage())
 	local current_name = get_group_name(gid) or ""
 	local function apply(n)
 		if n ~= nil then
