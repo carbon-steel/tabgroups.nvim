@@ -124,41 +124,63 @@ describe("tabgroups", function()
 		end)
 
 		it("next_tab_group returns to last visited tab in group", function()
-			-- Visit tab 3 last in group B so TabEnter sets _default_tab[B]=3
 			tabgroups.new_group("B")    -- tab 2 (B)
-			vim.cmd("tabnew")           -- tab 3 (B); TabEnter → _default_tab[B]=3
+			vim.cmd("tabnew")           -- tab 3 (B); TabEnter → _default_tab[B] = this tab
+			local last_visited_b = vim.api.nvim_get_current_tabpage()
 			vim.cmd("tabnext 1")        -- back to group A
 			tabgroups.next_tab_group()
-			assert.are.same(3, vim.fn.tabpagenr())
+			assert.are.same(last_visited_b, vim.api.nvim_get_current_tabpage())
 		end)
 
 		it("prev_tab_group returns to last visited tab in group", function()
-			-- Build tab1(A), tab2(A), tab3(B); visit tab2 last in A
 			tabgroups.new_group("B")    -- tab 2 (B)
-			vim.cmd("tabnext 1")        -- tab 1 (A); TabEnter → _default_tab[A]=1
-			vim.cmd("tabnew")           -- new tab 2 (A); old B→tab 3; TabEnter → _default_tab[A]=2
+			vim.cmd("tabnext 1")        -- tab 1 (A)
+			vim.cmd("tabnew")           -- new tab 2 (A); old B→tab 3; TabEnter → _default_tab[A] = this tab
+			local last_visited_a = vim.api.nvim_get_current_tabpage()
 			vim.cmd("tabnext 3")        -- group B
 			tabgroups.prev_tab_group()
-			assert.are.same(2, vim.fn.tabpagenr())
+			assert.are.same(last_visited_a, vim.api.nvim_get_current_tabpage())
+		end)
+
+		-- These two tests expose a bug: _default_tab stores a position number, so inserting a
+		-- tab before it shifts the position and points to the wrong tab.
+		it("next_tab_group returns to correct tab after a new tab is inserted before _default_tab", function()
+			tabgroups.new_group("B")    -- tab 2 (B)
+			vim.cmd("tabnew")           -- tab 3 (B); TabEnter → _default_tab[B] = this tab
+			local last_visited_b = vim.api.nvim_get_current_tabpage()
+			vim.cmd("tabnext 1")        -- tab 1 (A)
+			vim.cmd("tabnew")           -- new tab 2 (A); B's tabs shift up by one position
+			vim.cmd("tabnext 1")        -- tab 1 (A)
+			tabgroups.next_tab_group()
+			assert.are.same(last_visited_b, vim.api.nvim_get_current_tabpage())
+		end)
+
+		it("prev_tab_group returns to correct tab after a new tab is inserted before _default_tab", function()
+			tabgroups.new_group("B")    -- tab 2 (B)
+			vim.cmd("tabnew")           -- tab 3 (B); TabEnter → _default_tab[B] = this tab
+			local last_visited_b = vim.api.nvim_get_current_tabpage()
+			vim.cmd("tabnext 1")        -- tab 1 (A)
+			vim.cmd("tabnew")           -- new tab 2 (A); B's tabs shift up by one position
+			tabgroups.prev_tab_group()
+			assert.are.same(last_visited_b, vim.api.nvim_get_current_tabpage())
 		end)
 
 		it("next_tab_group falls back to first_tab when _default_tab was moved to another group", function()
-			-- Build tab1(A), tab2(B), tab3(B); set _default_tab[B]=3 via navigation
 			tabgroups.new_group("B")    -- tab 2 (B)
+			local first_b = vim.api.nvim_get_current_tabpage()
 			vim.cmd("tabnew")           -- tab 3 (B); TabEnter → _default_tab[B]=3
 			vim.cmd("tabnext 1")        -- tab 1 (A)
-			vim.cmd("tabnext 3")        -- tab 3 (B); TabEnter → _default_tab[B]=3
-			-- Move tab 3 into group A: _default_tab[B]=3 becomes stale
+			vim.cmd("tabnext 3")        -- tab 3 (B)
 			local gid_a = tabgroups.get_tab_group(1)
 			vim.ui.select = function(items, _, cb)
 				for _, item in ipairs(items) do
 					if item.gid == gid_a then cb(item); return end
 				end
 			end
-			tabgroups.move_current_tab()   -- tab 3 → group A (no TabEnter fires)
+			tabgroups.move_current_tab()   -- tab 3 → group A; _default_tab[B] becomes stale
 			vim.cmd("tabnext 1")           -- tab 1 (A)
-			tabgroups.next_tab_group()     -- B's _default_tab(3) is stale → falls back to first_tab=2
-			assert.are.same(2, vim.fn.tabpagenr())
+			tabgroups.next_tab_group()     -- stale _default_tab → falls back to first tab in B
+			assert.are.same(first_b, vim.api.nvim_get_current_tabpage())
 		end)
 	end)
 end)
