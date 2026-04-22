@@ -101,12 +101,23 @@ describe("tabgroups", function()
 	-- tabline rendering
 	-- -------------------------------------------------------------------------
 	describe("tabline rendering", function()
+		after_each(function()
+			while vim.fn.tabpagenr("$") > 1 do
+				vim.cmd("tabclose $")
+			end
+		end)
+
 		it("returns a non-empty string", function()
 			assert.is_true(#tabgroups.tabline() > 0)
 		end)
 
-		it("contains TabLineSel highlight", function()
-			assert.is_true(tabgroups.tabline():find("TabLineSel") ~= nil)
+		it("uses TabLineSel highlight for the current tab", function()
+			vim.api.nvim_buf_set_name(0, "current.lua")
+			local line = tabgroups.tabline()
+			vim.api.nvim_buf_set_name(0, "")
+			-- TabLineSel must appear before current.lua (left section),
+			-- not only in the right section where it highlights the current group.
+			assert.is_true(line:find("%%#TabLineSel#.-current%.lua") ~= nil)
 		end)
 
 		it("contains TabLineFill highlight", function()
@@ -116,6 +127,103 @@ describe("tabgroups", function()
 		it("contains right-align separator", function()
 			local line = tabgroups.tabline()
 			assert.is_true(line:find("%%=") ~= nil or line:find("%=") ~= nil)
+		end)
+
+		it(
+			"shows TabLine highlight for non-current tabs in the same group",
+			function()
+				assert.is_false(tabgroups.tabline():find("%%#TabLine#") ~= nil)
+				vim.cmd("tabnew") -- second tab in same group; first tab becomes non-current
+				assert.is_true(tabgroups.tabline():find("%%#TabLine#") ~= nil)
+			end
+		)
+
+		it("shows modified marker for a modified buffer", function()
+			assert.is_false(tabgroups.tabline():find("●") ~= nil)
+			vim.bo.modified = true
+			local line = tabgroups.tabline()
+			vim.bo.modified = false
+			assert.is_true(line:find("●") ~= nil)
+		end)
+
+		it("shows the filename for a named buffer", function()
+			assert.is_false(tabgroups.tabline():find("myfile.lua") ~= nil)
+			vim.api.nvim_buf_set_name(0, "myfile.lua")
+			local line = tabgroups.tabline()
+			vim.api.nvim_buf_set_name(0, "")
+			assert.is_true(line:find("myfile.lua") ~= nil)
+		end)
+	end)
+
+	-- -------------------------------------------------------------------------
+	-- next_tab_in_group / prev_tab_in_group
+	-- -------------------------------------------------------------------------
+	describe("next_tab_in_group / prev_tab_in_group", function()
+		after_each(function()
+			while vim.fn.tabpagenr("$") > 1 do
+				vim.cmd("tabclose $")
+			end
+		end)
+
+		-- Note: with 1 tab the modulo arithmetic wraps back to the same index, so
+		-- removing the early-return guard produces identical observable behavior.
+		-- This test verifies the correct outcome, not the guard's presence.
+		it("does nothing with a single tab in the group", function()
+			local tab = vim.api.nvim_get_current_tabpage()
+			tabgroups.next_tab_in_group()
+			assert.are.same(tab, vim.api.nvim_get_current_tabpage())
+			tabgroups.prev_tab_in_group()
+			assert.are.same(tab, vim.api.nvim_get_current_tabpage())
+		end)
+
+		it(
+			"next_tab_in_group cycles forward through tabs in the group",
+			function()
+				local tab1 = vim.api.nvim_get_current_tabpage()
+				vim.cmd("tabnew")
+				local tab2 = vim.api.nvim_get_current_tabpage()
+				vim.cmd("tabnew")
+				local tab3 = vim.api.nvim_get_current_tabpage()
+				vim.api.nvim_set_current_tabpage(tab1)
+				-- With 3 tabs, forward from tab1→tab2→tab3 is distinct from backward (tab1→tab3→tab2)
+				tabgroups.next_tab_in_group()
+				assert.are.same(tab2, vim.api.nvim_get_current_tabpage())
+				tabgroups.next_tab_in_group()
+				assert.are.same(tab3, vim.api.nvim_get_current_tabpage())
+				tabgroups.next_tab_in_group()
+				assert.are.same(tab1, vim.api.nvim_get_current_tabpage())
+			end
+		)
+
+		it(
+			"prev_tab_in_group cycles backward through tabs in the group",
+			function()
+				local tab1 = vim.api.nvim_get_current_tabpage()
+				vim.cmd("tabnew")
+				local tab2 = vim.api.nvim_get_current_tabpage()
+				vim.cmd("tabnew")
+				local tab3 = vim.api.nvim_get_current_tabpage()
+				-- With 3 tabs, backward from tab3→tab2→tab1 is distinct from forward (tab3→tab1→tab2)
+				tabgroups.prev_tab_in_group()
+				assert.are.same(tab2, vim.api.nvim_get_current_tabpage())
+				tabgroups.prev_tab_in_group()
+				assert.are.same(tab1, vim.api.nvim_get_current_tabpage())
+				tabgroups.prev_tab_in_group()
+				assert.are.same(tab3, vim.api.nvim_get_current_tabpage())
+			end
+		)
+
+		it("only cycles through tabs in the current group", function()
+			local tab_a1 = vim.api.nvim_get_current_tabpage()
+			tabgroups.new_group("B") -- tab_b in a different group
+			vim.api.nvim_set_current_tabpage(tab_a1)
+			vim.cmd("tabnew") -- tab_a2 in the same group as tab_a1
+			local tab_a2 = vim.api.nvim_get_current_tabpage()
+			vim.api.nvim_set_current_tabpage(tab_a1)
+			tabgroups.next_tab_in_group()
+			assert.are.same(tab_a2, vim.api.nvim_get_current_tabpage())
+			tabgroups.next_tab_in_group() -- wraps back to tab_a1
+			assert.are.same(tab_a1, vim.api.nvim_get_current_tabpage())
 		end)
 	end)
 
@@ -127,6 +235,18 @@ describe("tabgroups", function()
 			while vim.fn.tabpagenr("$") > 1 do
 				vim.cmd("tabclose $")
 			end
+		end)
+
+		it("next_tab_group does nothing when only one group exists", function()
+			local tab = vim.api.nvim_get_current_tabpage()
+			tabgroups.next_tab_group()
+			assert.are.same(tab, vim.api.nvim_get_current_tabpage())
+		end)
+
+		it("prev_tab_group does nothing when only one group exists", function()
+			local tab = vim.api.nvim_get_current_tabpage()
+			tabgroups.prev_tab_group()
+			assert.are.same(tab, vim.api.nvim_get_current_tabpage())
 		end)
 
 		it("next_tab_group returns to last visited tab in group", function()
@@ -186,5 +306,56 @@ describe("tabgroups", function()
 				assert.are.same(tab_b1, vim.api.nvim_get_current_tabpage())
 			end
 		)
+	end)
+
+	-- -------------------------------------------------------------------------
+	-- TabClosed: group membership after tab close
+	-- -------------------------------------------------------------------------
+	describe("TabClosed", function()
+		after_each(function()
+			while vim.fn.tabpagenr("$") > 1 do
+				vim.cmd("tabclose $")
+			end
+		end)
+
+		it(
+			"closing a tab in the current group stays in the same group",
+			function()
+				local gid =
+					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+				vim.cmd("tabnew") -- second tab, same group
+				vim.cmd("tabclose") -- close second tab; Neovim moves to first (same group)
+				assert.are.same(
+					gid,
+					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+				)
+			end
+		)
+
+		it(
+			"closing a tab navigates back when Neovim lands in a different group",
+			function()
+				local tab_a1 = vim.api.nvim_get_current_tabpage() -- A at pos 1
+				local gid_a = tabgroups.get_tab_group(tab_a1)
+				tabgroups.new_group("B") -- tab_b at pos 2
+				vim.cmd("tabnew") -- pos 3, inherits B's gid
+				local tab_a2 = vim.api.nvim_get_current_tabpage()
+				tabgroups.move_current_tab(gid_a) -- reassign to group A
+				-- layout: [A1(pos1), B(pos2), A2(pos3)]
+				vim.api.nvim_set_current_tabpage(tab_a1)
+				vim.cmd("tabclose") -- close A1 (pos 1); Neovim moves right to B (new pos 1)
+				-- handler: last=A, current=B → navigate to remaining A tab (tab_a2)
+				assert.are.same(tab_a2, vim.api.nvim_get_current_tabpage())
+			end
+		)
+
+		it("closing the last tab of a group clears its group state", function()
+			tabgroups.new_group("B")
+			local gid_b =
+				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			vim.tg[gid_b].marker = "set"
+			vim.cmd("tabclose") -- close the only B tab; group B no longer exists
+			assert.is_nil(vim.tg[gid_b].marker)
+		end)
 	end)
 end)
