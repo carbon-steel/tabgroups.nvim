@@ -43,9 +43,13 @@ end
 -- make_proxy(get_current_gid_fn) returns the vim.tg table.
 -- get_current_gid_fn is called at access time so the proxy always reflects
 -- the current tab group.
+-- vim.tg.clear(gid) clears all variables for a group.
 function M.make_proxy(get_current_gid)
 	return setmetatable({}, {
 		__index = function(_, key)
+			if key == "clear" then
+				return M.clear
+			end
 			if type(key) == "number" then
 				return group_proxy(key)
 			end
