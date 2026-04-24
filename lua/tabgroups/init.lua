@@ -1,6 +1,7 @@
 -- tabgroups.nvim: organize neovim tabs into named groups
 local M = {}
 local internal = require("tabgroups.internal")
+local group_variables = require("tabgroups.group_variables")
 
 -- Group names: gid -> name (module-level, lives as long as nvim session)
 local group_names = {}
@@ -386,6 +387,24 @@ function M.rename_current_group(name)
 	end
 end
 
+
+-- Save variables for a tab group to a JSON file.
+-- gid defaults to the current group when omitted.
+function M.save_group_vars(filepath, gid)
+	if not gid then
+		gid = get_tab_group(vim.api.nvim_get_current_tabpage())
+	end
+	return group_variables.save(gid, filepath)
+end
+
+-- Load variables for a tab group from a JSON file, replacing existing vars.
+-- gid defaults to the current group when omitted.
+function M.load_group_vars(filepath, gid, on_conflict)
+	if not gid then
+		gid = get_tab_group(vim.api.nvim_get_current_tabpage())
+	end
+	return group_variables.load(gid, filepath, on_conflict)
+end
 
 -- Internal functions used by plugin/tabgroups.lua (prefixed to signal non-public API)
 M.get_tab_group = get_tab_group
