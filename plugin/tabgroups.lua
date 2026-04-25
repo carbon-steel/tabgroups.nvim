@@ -101,6 +101,10 @@ vim.api.nvim_create_autocmd("TabClosed", {
 			end
 		end
 		if not group_still_exists then
+			vim.api.nvim_exec_autocmds("User", {
+				pattern = "TabGroupClosed",
+				data = { id = last_group_id, name = tabgroups.get_group_name(last_group_id) },
+			})
 			vim.tg.clear(last_group_id)
 		end
 	end,

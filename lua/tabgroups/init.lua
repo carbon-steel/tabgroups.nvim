@@ -411,5 +411,7 @@ M.get_tab_group = get_tab_group
 M._set_tab_group = set_tab_group
 M._new_group_id = new_group_id
 
+M.get_group_name = get_group_name
+
 
 return M
