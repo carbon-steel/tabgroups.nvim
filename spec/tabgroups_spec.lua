@@ -6,6 +6,7 @@ describe("tabgroups", function()
 		package.loaded["tabgroups"] = nil
 		package.loaded["tabgroups.group_variables"] = nil
 		package.loaded["tabgroups.internal"] = nil
+		package.loaded["tabgroups.setup"] = nil
 		tabgroups = require("tabgroups")
 		-- Source the plugin to register autocmds (TabNew, TabEnter, etc.) and vim.tg
 		vim.cmd("source plugin/tabgroups.lua")

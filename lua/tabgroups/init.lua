@@ -418,5 +418,6 @@ M._clear_default_tab = function(gid) default_tabs[gid] = nil end
 
 M.get_group_name = get_group_name
 
+require("tabgroups.setup").setup(M, group_variables, internal)
 
 return M

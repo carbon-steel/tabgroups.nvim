@@ -6,6 +6,7 @@ describe("group_variables", function()
 		package.loaded["tabgroups"] = nil
 		package.loaded["tabgroups.group_variables"] = nil
 		package.loaded["tabgroups.internal"] = nil
+		package.loaded["tabgroups.setup"] = nil
 		tabgroups = require("tabgroups")
 		vim.cmd("source plugin/tabgroups.lua")
 	end)
