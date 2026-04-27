@@ -9,6 +9,9 @@ local group_names = {}
 -- Tab group assignments: handle -> gid
 local tab_groups = {}
 
+-- Last-visited tab per group: gid -> handle
+local default_tabs = {}
+
 local function get_group_name(gid)
 	return group_names[gid]
 end
@@ -105,9 +108,9 @@ local function get_dir_display_name(cwd, max_width)
 	return dir_name
 end
 
--- Return the _default_tab handle for a group if valid and still in that group, else nil
+-- Return the default tab handle for a group if valid and still in that group, else nil
 local function get_default_tab(gid)
-	local handle = vim.tg[gid]._default_tab
+	local handle = default_tabs[gid]
 	if handle
 		and vim.api.nvim_tabpage_is_valid(handle)
 		and get_tab_group(handle) == gid
@@ -410,6 +413,8 @@ end
 M.get_tab_group = get_tab_group
 M._set_tab_group = set_tab_group
 M._new_group_id = new_group_id
+M._set_default_tab = function(gid, handle) default_tabs[gid] = handle end
+M._clear_default_tab = function(gid) default_tabs[gid] = nil end
 
 M.get_group_name = get_group_name
 
