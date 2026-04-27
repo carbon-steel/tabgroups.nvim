@@ -359,38 +359,61 @@ describe("tabgroups", function()
 			assert.is_nil(vim.tg[gid_b].marker)
 		end)
 
-		it("fires TabGroupClosed with id and name when the last tab of a group closes", function()
-			tabgroups.new_group("my-group")
-			local gid_b = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-			vim.tg[gid_b].foo = "bar"
-			local event_data = nil
-			local vars_at_fire = nil
-			vim.api.nvim_create_autocmd("User", {
-				pattern = "TabGroupClosed",
-				once = true,
-				callback = function(ev)
-					event_data = ev.data
-					vars_at_fire = vim.tg[gid_b].foo
-				end,
-			})
-			vim.cmd("tabclose")
-			assert.are.same(gid_b, event_data.id)
-			assert.are.same("my-group", event_data.name)
-			assert.are.same("bar", vars_at_fire)
-		end)
+		it(
+			"fires TabGroupClosed with id and name when the last tab of a group closes",
+			function()
+				tabgroups.new_group("my-group")
+				local gid_b =
+					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+				vim.tg[gid_b].foo = "bar"
+				local event_data = nil
+				local vars_at_fire = nil
+				vim.api.nvim_create_autocmd("User", {
+					pattern = "TabGroupClosed",
+					once = true,
+					callback = function(ev)
+						event_data = ev.data
+						vars_at_fire = vim.tg[gid_b].foo
+					end,
+				})
+				vim.cmd("tabclose")
+				assert.are.same(gid_b, event_data.id)
+				assert.are.same("my-group", event_data.name)
+				assert.are.same("bar", vars_at_fire)
+			end
+		)
 
-		it("does not fire TabGroupClosed when the group still has tabs", function()
-			vim.cmd("tabnew") -- second tab in the same group
-			local fired = false
-			vim.api.nvim_create_autocmd("User", {
-				pattern = "TabGroupClosed",
-				once = true,
-				callback = function()
-					fired = true
-				end,
-			})
-			vim.cmd("tabclose")
-			assert.is_false(fired)
+		it(
+			"does not fire TabGroupClosed when the group still has tabs",
+			function()
+				vim.cmd("tabnew") -- second tab in the same group
+				local fired = false
+				vim.api.nvim_create_autocmd("User", {
+					pattern = "TabGroupClosed",
+					once = true,
+					callback = function()
+						fired = true
+					end,
+				})
+				vim.cmd("tabclose")
+				assert.is_false(fired)
+			end
+		)
+
+		it("closing tab6 after navigating from tab2 returns to tab2", function()
+			-- Create a 6-tab group
+			vim.cmd("tabnew")
+			local tab2 = vim.api.nvim_get_current_tabpage()
+			vim.cmd("tabnew")
+			vim.cmd("tabnew")
+			vim.cmd("tabnew")
+			vim.cmd("tabnew")
+			local tab6 = vim.api.nvim_get_current_tabpage()
+			-- Go to tab2, then jump directly to tab6
+			vim.api.nvim_set_current_tabpage(tab2)
+			vim.api.nvim_set_current_tabpage(tab6)
+			vim.cmd("tabclose") -- close tab6; should return to tab2
+			assert.are.same(tab2, vim.api.nvim_get_current_tabpage())
 		end)
 	end)
 end)

@@ -22,6 +22,13 @@ function M.setup(tabgroups, group_vars, internal)
 
 	local augroup = vim.api.nvim_create_augroup("TabGroups", { clear = true })
 
+	-- Track the group ID and handle of the tab we're leaving
+	local last_group_id = nil
+	local last_handle = nil
+
+	-- Maps tab handle → the tab that navigated to it (most recent)
+	local tab_predecessor = {}
+
 	-- Refresh tabline when tab layout changes
 	vim.api.nvim_create_autocmd(
 		{ "DirChanged", "TabEnter", "TabNew", "TabClosed" },
@@ -40,12 +47,11 @@ function M.setup(tabgroups, group_vars, internal)
 		callback = function()
 			local handle = vim.api.nvim_get_current_tabpage()
 			tabgroups._set_default_tab(tabgroups.get_tab_group(handle), handle)
+			if last_handle and last_handle ~= handle then
+				tab_predecessor[handle] = last_handle
+			end
 		end,
 	})
-
-	-- Track the group ID and handle of the tab we're leaving
-	local last_group_id = nil
-	local last_handle = nil
 
 	vim.api.nvim_create_autocmd("TabLeave", {
 		group = augroup,
@@ -71,9 +77,13 @@ function M.setup(tabgroups, group_vars, internal)
 	vim.api.nvim_create_autocmd("TabClosed", {
 		group = augroup,
 		callback = function()
-			-- Remove the closed tab's group entry
+			-- Save predecessor before clearing the closed tab's entries
+			local pred = last_handle and tab_predecessor[last_handle]
+
+			-- Remove the closed tab's group entry and predecessor record
 			if last_handle then
 				tabgroups._set_tab_group(last_handle, nil)
+				tab_predecessor[last_handle] = nil
 			end
 
 			if not last_group_id then
@@ -83,6 +93,13 @@ function M.setup(tabgroups, group_vars, internal)
 			local current_gid = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 
 			if current_gid == last_group_id then
+				-- Same group: return to the tab we navigated from, if still valid
+				if pred
+					and vim.api.nvim_tabpage_is_valid(pred)
+					and tabgroups.get_tab_group(pred) == last_group_id
+				then
+					vim.api.nvim_set_current_tabpage(pred)
+				end
 				return
 			end
 
