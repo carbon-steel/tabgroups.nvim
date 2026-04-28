@@ -6,6 +6,7 @@ local M = {}
 
 local group_vars = {} -- gid -> { key -> value }
 local proxies = {} -- gid -> proxy table (cached)
+local current_gid_fn = nil -- set by make_proxy; used by snapshot() as default
 
 function M.get(gid, key)
 	if not group_vars[gid] then
@@ -45,6 +46,7 @@ end
 -- the current tab group.
 -- tg.clear(gid) clears all variables for a group.
 function M.make_proxy(get_current_gid)
+	current_gid_fn = get_current_gid
 	return setmetatable({}, {
 		__index = function(_, key)
 			if key == "clear" then
@@ -93,6 +95,9 @@ function M.load(gid, filepath, on_conflict)
 end
 
 function M.snapshot(gid)
+	if gid == nil and current_gid_fn then
+		gid = current_gid_fn()
+	end
 	local function deep_copy(t)
 		local copy = {}
 		for k, v in pairs(t) do
@@ -101,6 +106,17 @@ function M.snapshot(gid)
 		return copy
 	end
 	return deep_copy(group_vars[gid] or {})
+end
+
+function M.shallow_copy(gid)
+	if gid == nil and current_gid_fn then
+		gid = current_gid_fn()
+	end
+	local copy = {}
+	for k, v in pairs(group_vars[gid] or {}) do
+		copy[k] = v
+	end
+	return copy
 end
 
 function M.save(gid, filepath)

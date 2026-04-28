@@ -411,9 +411,11 @@ end
 
 -- Return a shallow copy of a tab group's variables. gid defaults to current group.
 function M.get_group_vars(gid)
-	if not gid then
-		gid = get_tab_group(vim.api.nvim_get_current_tabpage())
-	end
+	return group_variables.shallow_copy(gid)
+end
+
+-- Return a deep copy of a tab group's variables. gid defaults to current group.
+function M.snapshot(gid)
 	return group_variables.snapshot(gid)
 end
 

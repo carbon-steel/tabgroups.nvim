@@ -8,15 +8,15 @@ function M.setup(tabgroups, group_vars, internal)
 
 	vim.api.nvim_create_user_command("TabGroupMove", function()
 		tabgroups.move_current_tab()
-	end, { desc = "Move current tab into a selected tab group" })
+	end, { force = true, desc = "Move current tab into a selected tab group" })
 
 	vim.api.nvim_create_user_command("TabGroupNew", function(opts)
 		tabgroups.new_group(opts.args ~= "" and opts.args or nil)
-	end, { desc = "Open a new tab in a new tab group", nargs = "?" })
+	end, { force = true, desc = "Open a new tab in a new tab group", nargs = "?" })
 
 	vim.api.nvim_create_user_command("TabGroupRename", function(opts)
 		tabgroups.rename_current_group(opts.args ~= "" and opts.args or nil)
-	end, { desc = "Rename the current tab group", nargs = "?" })
+	end, { force = true, desc = "Rename the current tab group", nargs = "?" })
 
 	-- Core autocmds: group inheritance and focus retention
 
