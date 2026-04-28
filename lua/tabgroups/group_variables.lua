@@ -1,7 +1,7 @@
--- Per-tab-group key-value storage, accessed via vim.tg
--- vim.tg.foo          → get key "foo" from current group
--- vim.tg.foo = val    → set key "foo" in current group
--- vim.tg[3]           → proxy table for gid 3
+-- Per-tab-group key-value storage, accessed via require("tabgroups").tg
+-- tg.foo          → get key "foo" from current group
+-- tg.foo = val    → set key "foo" in current group
+-- tg[3]           → proxy table for gid 3
 local M = {}
 
 local group_vars = {} -- gid -> { key -> value }
@@ -40,10 +40,10 @@ local function group_proxy(gid)
 	return proxies[gid]
 end
 
--- make_proxy(get_current_gid_fn) returns the vim.tg table.
+-- make_proxy(get_current_gid_fn) returns the tg proxy table.
 -- get_current_gid_fn is called at access time so the proxy always reflects
 -- the current tab group.
--- vim.tg.clear(gid) clears all variables for a group.
+-- tg.clear(gid) clears all variables for a group.
 function M.make_proxy(get_current_gid)
 	return setmetatable({}, {
 		__index = function(_, key)

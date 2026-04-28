@@ -2,7 +2,7 @@ local M = {}
 
 function M.setup(tabgroups, group_vars, internal)
 
-	vim.tg = group_vars.make_proxy(function()
+	tabgroups.tg = group_vars.make_proxy(function()
 		return tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 	end)
 
@@ -124,7 +124,7 @@ function M.setup(tabgroups, group_vars, internal)
 					data = { id = last_group_id, name = tabgroups.get_group_name(last_group_id) },
 				})
 				tabgroups._clear_default_tab(last_group_id)
-				vim.tg.clear(last_group_id)
+				tabgroups.tg.clear(last_group_id)
 			end
 		end,
 	})

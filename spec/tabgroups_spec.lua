@@ -8,7 +8,7 @@ describe("tabgroups", function()
 		package.loaded["tabgroups.internal"] = nil
 		package.loaded["tabgroups.setup"] = nil
 		tabgroups = require("tabgroups")
-		-- Source the plugin to register autocmds (TabNew, TabEnter, etc.) and vim.tg
+		-- Source the plugin to register autocmds (TabNew, TabEnter, etc.) and tabgroups.tg
 		vim.cmd("source plugin/tabgroups.lua")
 	end)
 
@@ -354,9 +354,9 @@ describe("tabgroups", function()
 			tabgroups.new_group("B")
 			local gid_b =
 				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-			vim.tg[gid_b].marker = "set"
+			tabgroups.tg[gid_b].marker = "set"
 			vim.cmd("tabclose") -- close the only B tab; group B no longer exists
-			assert.is_nil(vim.tg[gid_b].marker)
+			assert.is_nil(tabgroups.tg[gid_b].marker)
 		end)
 
 		it(
@@ -365,7 +365,7 @@ describe("tabgroups", function()
 				tabgroups.new_group("my-group")
 				local gid_b =
 					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-				vim.tg[gid_b].foo = "bar"
+				tabgroups.tg[gid_b].foo = "bar"
 				local event_data = nil
 				local vars_at_fire = nil
 				vim.api.nvim_create_autocmd("User", {
@@ -373,7 +373,7 @@ describe("tabgroups", function()
 					once = true,
 					callback = function(ev)
 						event_data = ev.data
-						vars_at_fire = vim.tg[gid_b].foo
+						vars_at_fire = tabgroups.tg[gid_b].foo
 					end,
 				})
 				vim.cmd("tabclose")
