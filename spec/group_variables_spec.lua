@@ -42,6 +42,8 @@ describe("group_variables", function()
 			assert.are.same("group 1", tabgroups.tg.x)
 			vim.api.nvim_set_current_tabpage(tab2)
 			assert.are.same("group 2", tabgroups.tg.x)
+			vim.api.nvim_win_close(0, true)
+			assert.are.same("group 1", tabgroups.tg.x)
 		end)
 	end)
 
@@ -98,6 +100,57 @@ describe("group_variables", function()
 			tabgroups.tg[gid].key = "before"
 			tabgroups.tg.clear(gid)
 			assert.is_nil(tabgroups.tg[gid].key)
+		end)
+	end)
+
+	-- -------------------------------------------------------------------------
+	-- get_group_vars: snapshot copy
+	-- -------------------------------------------------------------------------
+	describe("get_group_vars", function()
+		it("returns a table with the group's variables", function()
+			tabgroups.tg.a = 1
+			tabgroups.tg.b = "hello"
+			local gid = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			local snap = tabgroups.get_group_vars(gid)
+			assert.are.same(1, snap.a)
+			assert.are.same("hello", snap.b)
+		end)
+
+		it("defaults to current group when gid is omitted", function()
+			tabgroups.tg.x = "current"
+			local snap = tabgroups.get_group_vars()
+			assert.are.same("current", snap.x)
+		end)
+
+		it("returns an empty table for a group with no variables", function()
+			tabgroups.new_group("empty")
+			local gid = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			local snap = tabgroups.get_group_vars(gid)
+			assert.are.same({}, snap)
+		end)
+
+		it("mutations to the copy do not affect the group", function()
+			tabgroups.tg.val = "original"
+			local snap = tabgroups.get_group_vars()
+			snap.val = "mutated"
+			assert.are.same("original", tabgroups.tg.val)
+		end)
+
+		it("mutations to nested tables in the copy do not affect the group", function()
+			tabgroups.tg.nested = { x = 1 }
+			local snap = tabgroups.get_group_vars()
+			snap.nested.x = 99
+			assert.are.same(1, tabgroups.tg.nested.x)
+		end)
+
+		it("does not include variables from other groups", function()
+			local gid1 = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			tabgroups.tg.only_in_1 = true
+			tabgroups.new_group("other")
+			tabgroups.tg.only_in_2 = true
+			local snap = tabgroups.get_group_vars(gid1)
+			assert.is_true(snap.only_in_1)
+			assert.is_nil(snap.only_in_2)
 		end)
 	end)
 

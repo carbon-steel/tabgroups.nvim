@@ -92,6 +92,17 @@ function M.load(gid, filepath, on_conflict)
 	return true
 end
 
+function M.snapshot(gid)
+	local function deep_copy(t)
+		local copy = {}
+		for k, v in pairs(t) do
+			copy[k] = type(v) == "table" and deep_copy(v) or v
+		end
+		return copy
+	end
+	return deep_copy(group_vars[gid] or {})
+end
+
 function M.save(gid, filepath)
 	local vars = group_vars[gid] or {}
 	local json = vim.fn.json_encode(vars)

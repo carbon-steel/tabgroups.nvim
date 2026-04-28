@@ -409,6 +409,14 @@ function M.load_group_vars(filepath, gid, on_conflict)
 	return group_variables.load(gid, filepath, on_conflict)
 end
 
+-- Return a shallow copy of a tab group's variables. gid defaults to current group.
+function M.get_group_vars(gid)
+	if not gid then
+		gid = get_tab_group(vim.api.nvim_get_current_tabpage())
+	end
+	return group_variables.snapshot(gid)
+end
+
 -- Internal functions used by plugin/tabgroups.lua (prefixed to signal non-public API)
 M.get_tab_group = get_tab_group
 M._set_tab_group = set_tab_group
