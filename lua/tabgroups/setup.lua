@@ -1,7 +1,6 @@
 local M = {}
 
 function M.setup(tabgroups, group_vars, internal)
-
 	tabgroups.tg = group_vars.make_proxy(function()
 		return tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 	end)
@@ -12,7 +11,11 @@ function M.setup(tabgroups, group_vars, internal)
 
 	vim.api.nvim_create_user_command("TabGroupNew", function(opts)
 		tabgroups.new_group(opts.args ~= "" and opts.args or nil)
-	end, { force = true, desc = "Open a new tab in a new tab group", nargs = "?" })
+	end, {
+		force = true,
+		desc = "Open a new tab in a new tab group",
+		nargs = "?",
+	})
 
 	vim.api.nvim_create_user_command("TabGroupRename", function(opts)
 		tabgroups.rename_current_group(opts.args ~= "" and opts.args or nil)
@@ -46,9 +49,16 @@ function M.setup(tabgroups, group_vars, internal)
 		group = augroup,
 		callback = function()
 			local handle = vim.api.nvim_get_current_tabpage()
-			tabgroups._set_default_tab(tabgroups.get_tab_group(handle), handle)
+			local gid = tabgroups.get_tab_group(handle)
+			tabgroups._set_default_tab(gid, handle)
 			if last_handle and last_handle ~= handle then
 				tab_predecessor[handle] = last_handle
+			end
+			if last_group_id and last_group_id ~= gid then
+				vim.api.nvim_exec_autocmds("User", {
+					pattern = "TabGroupEnter",
+					data = { id = gid },
+				})
 			end
 		end,
 	})
@@ -90,11 +100,13 @@ function M.setup(tabgroups, group_vars, internal)
 				return
 			end
 
-			local current_gid = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			local current_gid =
+				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 
 			if current_gid == last_group_id then
 				-- Same group: return to the tab we navigated from, if still valid
-				if pred
+				if
+					pred
 					and vim.api.nvim_tabpage_is_valid(pred)
 					and tabgroups.get_tab_group(pred) == last_group_id
 				then
@@ -121,7 +133,10 @@ function M.setup(tabgroups, group_vars, internal)
 			if not group_still_exists then
 				vim.api.nvim_exec_autocmds("User", {
 					pattern = "TabGroupClosed",
-					data = { id = last_group_id, name = tabgroups.get_group_name(last_group_id) },
+					data = {
+						id = last_group_id,
+						name = tabgroups.get_group_name(last_group_id),
+					},
 				})
 				tabgroups._clear_default_tab(last_group_id)
 				tabgroups.tg.clear(last_group_id)

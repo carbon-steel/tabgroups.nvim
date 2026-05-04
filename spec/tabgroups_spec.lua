@@ -400,6 +400,49 @@ describe("tabgroups", function()
 			end
 		)
 
+		it(
+			"fires TabGroupEnter with id when switching to a different group",
+			function()
+				local tab_a = vim.api.nvim_get_current_tabpage()
+				tabgroups.new_group("group-b")
+				local gid_b =
+					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+				local tab_b = vim.api.nvim_get_current_tabpage()
+				vim.api.nvim_set_current_tabpage(tab_a) -- go back to group A
+				local event_data = nil
+				vim.api.nvim_create_autocmd("User", {
+					pattern = "TabGroupEnter",
+					once = true,
+					callback = function(ev)
+						event_data = ev.data
+					end,
+				})
+				vim.api.nvim_set_current_tabpage(tab_b) -- enter group B
+				assert.are.same(gid_b, event_data.id)
+			end
+		)
+
+		it(
+			"does not fire TabGroupEnter when switching within the same group",
+			function()
+				vim.cmd("tabnew") -- same group
+				local tab2 = vim.api.nvim_get_current_tabpage()
+				vim.cmd("tabnew")
+				local tab3 = vim.api.nvim_get_current_tabpage()
+				vim.api.nvim_set_current_tabpage(tab2)
+				local fired = false
+				vim.api.nvim_create_autocmd("User", {
+					pattern = "TabGroupEnter",
+					once = true,
+					callback = function()
+						fired = true
+					end,
+				})
+				vim.api.nvim_set_current_tabpage(tab3)
+				assert.is_false(fired)
+			end
+		)
+
 		it("closing tab6 after navigating from tab2 returns to tab2", function()
 			-- Create a 6-tab group
 			vim.cmd("tabnew")
