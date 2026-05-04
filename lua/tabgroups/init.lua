@@ -373,6 +373,28 @@ function M.new_group(name)
 	end
 end
 
+-- Close all tabs in the current tab group
+function M.close_current_group()
+	local tabs = get_tabs_in_group()
+	local all_tabs = vim.api.nvim_list_tabpages()
+
+	if #tabs == #all_tabs then
+		vim.notify("Cannot close the only tab group", vim.log.levels.WARN)
+		return
+	end
+
+	-- Capture tab numbers before any closures; close highest-first so lower numbers stay stable
+	local entries = {}
+	for _, handle in ipairs(tabs) do
+		table.insert(entries, vim.api.nvim_tabpage_get_number(handle))
+	end
+	table.sort(entries, function(a, b) return a > b end)
+
+	for _, tabnr in ipairs(entries) do
+		vim.cmd("tabclose " .. tabnr)
+	end
+end
+
 -- Rename the current tab group; name can be passed directly or prompted
 function M.rename_current_group(name)
 	local gid = get_tab_group(vim.api.nvim_get_current_tabpage())

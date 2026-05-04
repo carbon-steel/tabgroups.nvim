@@ -21,6 +21,10 @@ function M.setup(tabgroups, group_vars, internal)
 		tabgroups.rename_current_group(opts.args ~= "" and opts.args or nil)
 	end, { force = true, desc = "Rename the current tab group", nargs = "?" })
 
+	vim.api.nvim_create_user_command("TabGroupClose", function()
+		tabgroups.close_current_group()
+	end, { force = true, desc = "Close all tabs in the current tab group" })
+
 	-- Core autocmds: group inheritance and focus retention
 
 	local augroup = vim.api.nvim_create_augroup("TabGroups", { clear = true })

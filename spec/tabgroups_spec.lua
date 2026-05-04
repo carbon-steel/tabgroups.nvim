@@ -459,4 +459,81 @@ describe("tabgroups", function()
 			assert.are.same(tab2, vim.api.nvim_get_current_tabpage())
 		end)
 	end)
+
+	-- -------------------------------------------------------------------------
+	-- close_current_group
+	-- -------------------------------------------------------------------------
+	describe("close_current_group", function()
+		after_each(function()
+			while vim.fn.tabpagenr("$") > 1 do
+				vim.cmd("tabclose $")
+			end
+		end)
+
+		it("warns and does not close any tabs when it is the only group", function()
+			vim.cmd("tabnew")
+			local warned = false
+			local orig = vim.notify
+			vim.notify = function(_, level)
+				if level == vim.log.levels.WARN then
+					warned = true
+				end
+			end
+			tabgroups.close_current_group()
+			vim.notify = orig
+			assert.is_true(warned)
+			assert.are.same(2, vim.fn.tabpagenr("$"))
+		end)
+
+		it("closes all tabs in the current group", function()
+			local tab_a1 = vim.api.nvim_get_current_tabpage()
+			vim.cmd("tabnew") -- tab_a2 inherits group A
+			tabgroups.new_group("B")
+			local tab_b1 = vim.api.nvim_get_current_tabpage()
+			vim.api.nvim_set_current_tabpage(tab_a1)
+			tabgroups.close_current_group()
+			assert.are.same({ tab_b1 }, vim.api.nvim_list_tabpages())
+		end)
+
+		it("lands in another group after closing", function()
+			local tab_a = vim.api.nvim_get_current_tabpage()
+			tabgroups.new_group("B")
+			local gid_b =
+				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			vim.api.nvim_set_current_tabpage(tab_a)
+			tabgroups.close_current_group()
+			assert.are.same(
+				gid_b,
+				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			)
+		end)
+
+		it("removes the closed group from the tabline", function()
+			local tab_a = vim.api.nvim_get_current_tabpage()
+			tabgroups.rename_current_group("alpha")
+			tabgroups.new_group("beta")
+			vim.api.nvim_set_current_tabpage(tab_a)
+			tabgroups.close_current_group()
+			local line = tabgroups.tabline()
+			assert.is_nil(line:find("alpha"))
+			assert.is_truthy(line:find("beta"))
+		end)
+
+		it("fires TabGroupClosed for the closed group", function()
+			local tab_a = vim.api.nvim_get_current_tabpage()
+			local gid_a = tabgroups.get_tab_group(tab_a)
+			tabgroups.new_group("B")
+			vim.api.nvim_set_current_tabpage(tab_a)
+			local closed_id = nil
+			vim.api.nvim_create_autocmd("User", {
+				pattern = "TabGroupClosed",
+				once = true,
+				callback = function(ev)
+					closed_id = ev.data.id
+				end,
+			})
+			tabgroups.close_current_group()
+			assert.are.same(gid_a, closed_id)
+		end)
+	end)
 end)
