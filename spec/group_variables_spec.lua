@@ -110,7 +110,8 @@ describe("group_variables", function()
 		it("returns a table with the group's variables", function()
 			tabgroups.tg.a = 1
 			tabgroups.tg.b = "hello"
-			local gid = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			local gid =
+				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 			local snap = tabgroups.get_group_vars(gid)
 			assert.are.same(1, snap.a)
 			assert.are.same("hello", snap.b)
@@ -124,7 +125,8 @@ describe("group_variables", function()
 
 		it("returns an empty table for a group with no variables", function()
 			tabgroups.new_group("empty")
-			local gid = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			local gid =
+				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 			local snap = tabgroups.get_group_vars(gid)
 			assert.are.same({}, snap)
 		end)
@@ -136,14 +138,18 @@ describe("group_variables", function()
 			assert.are.same("original", tabgroups.tg.val)
 		end)
 
-		it("nested tables in the copy are the same reference (shallow copy)", function()
-			tabgroups.tg.nested = { x = 1 }
-			local snap = tabgroups.get_group_vars()
-			assert.are.equal(snap.nested, tabgroups.tg.nested)
-		end)
+		it(
+			"nested tables in the copy are the same reference (shallow copy)",
+			function()
+				tabgroups.tg.nested = { x = 1 }
+				local snap = tabgroups.get_group_vars()
+				assert.are.equal(snap.nested, tabgroups.tg.nested)
+			end
+		)
 
 		it("does not include variables from other groups", function()
-			local gid1 = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			local gid1 =
+				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 			tabgroups.tg.only_in_1 = true
 			tabgroups.new_group("other")
 			tabgroups.tg.only_in_2 = true
@@ -160,7 +166,8 @@ describe("group_variables", function()
 		it("returns a table with the group's variables", function()
 			tabgroups.tg.a = 1
 			tabgroups.tg.b = "hello"
-			local gid = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			local gid =
+				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 			local snap = tabgroups.snapshot(gid)
 			assert.are.same(1, snap.a)
 			assert.are.same("hello", snap.b)
@@ -174,7 +181,8 @@ describe("group_variables", function()
 
 		it("returns an empty table for a group with no variables", function()
 			tabgroups.new_group("empty")
-			local gid = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			local gid =
+				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 			local snap = tabgroups.snapshot(gid)
 			assert.are.same({}, snap)
 		end)
@@ -186,15 +194,19 @@ describe("group_variables", function()
 			assert.are.same("original", tabgroups.tg.val)
 		end)
 
-		it("mutations to nested tables in the copy do not affect the group", function()
-			tabgroups.tg.nested = { x = 1 }
-			local snap = tabgroups.snapshot()
-			snap.nested.x = 99
-			assert.are.same(1, tabgroups.tg.nested.x)
-		end)
+		it(
+			"mutations to nested tables in the copy do not affect the group",
+			function()
+				tabgroups.tg.nested = { x = 1 }
+				local snap = tabgroups.snapshot()
+				snap.nested.x = 99
+				assert.are.same(1, tabgroups.tg.nested.x)
+			end
+		)
 
 		it("does not include variables from other groups", function()
-			local gid1 = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			local gid1 =
+				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 			tabgroups.tg.only_in_1 = true
 			tabgroups.new_group("other")
 			tabgroups.tg.only_in_2 = true
@@ -202,6 +214,104 @@ describe("group_variables", function()
 			assert.is_true(snap.only_in_1)
 			assert.is_nil(snap.only_in_2)
 		end)
+	end)
+
+	-- -------------------------------------------------------------------------
+	-- variable correctness after tab group switching
+	-- -------------------------------------------------------------------------
+	describe("variable correctness after tab group switching", function()
+		after_each(function()
+			while vim.fn.tabpagenr("$") > 1 do
+				vim.cmd("tabclose $")
+			end
+		end)
+
+		it("tg reads the correct group after next_tab_group", function()
+			tabgroups.tg.val = "group_a"
+			tabgroups.new_group("B")
+			tabgroups.tg.val = "group_b"
+			tabgroups.prev_tab_group() -- back to A
+			assert.are.same("group_a", tabgroups.tg.val)
+			tabgroups.next_tab_group() -- forward to B
+			assert.are.same("group_b", tabgroups.tg.val)
+			tabgroups.next_tab_group() -- forward to A
+			assert.are.same("group_a", tabgroups.tg.val)
+		end)
+
+		it(
+			"writes after next_tab_group land in the destination group",
+			function()
+				local gid_a =
+					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+				tabgroups.new_group("B")
+				local gid_b =
+					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+				tabgroups.prev_tab_group() -- back to A
+				tabgroups.next_tab_group() -- forward to B
+				tabgroups.tg.written = "in_b"
+				tabgroups.prev_tab_group() -- back to A
+				assert.are.same("in_b", tabgroups.tg[gid_b].written)
+				assert.is_nil(tabgroups.tg[gid_a].written)
+			end
+		)
+
+		it("original group variables survive a next/prev round-trip", function()
+			tabgroups.tg.x = "start"
+			tabgroups.new_group("B")
+			-- currently in B; prev→A, next→B, prev→A
+			tabgroups.prev_tab_group() -- B → A
+			tabgroups.next_tab_group() -- A → B
+			tabgroups.prev_tab_group() -- B → A
+			assert.are.same("start", tabgroups.tg.x)
+		end)
+
+		it(
+			"all groups keep distinct values across multiple switches",
+			function()
+				local tab_a = vim.api.nvim_get_current_tabpage()
+				local gid_a = tabgroups.get_tab_group(tab_a)
+				tabgroups.tg.color = "red"
+				tabgroups.new_group("B")
+				local gid_b =
+					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+				tabgroups.tg.color = "blue"
+				tabgroups.new_group("C")
+				local gid_c =
+					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+				tabgroups.tg.color = "green"
+
+				-- switch around and verify no cross-contamination
+				tabgroups.prev_tab_group() -- C → B
+				assert.are.same("blue", tabgroups.tg.color)
+				tabgroups.prev_tab_group() -- B → A
+				assert.are.same("red", tabgroups.tg.color)
+				tabgroups.next_tab_group() -- A → B
+				assert.are.same("blue", tabgroups.tg.color)
+				tabgroups.next_tab_group() -- B → C
+				assert.are.same("green", tabgroups.tg.color)
+
+				-- addressed access stays independent throughout
+				assert.are.same("red", tabgroups.tg[gid_a].color)
+				assert.are.same("blue", tabgroups.tg[gid_b].color)
+				assert.are.same("green", tabgroups.tg[gid_c].color)
+			end
+		)
+
+		it(
+			"tg.clear in one group does not affect variables in another group after switching",
+			function()
+				tabgroups.tg.k = "a"
+				tabgroups.new_group("B")
+				tabgroups.tg.k = "b"
+				local gid_b =
+					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+				tabgroups.tg.clear(gid_b)
+				tabgroups.prev_tab_group() -- back to A
+				assert.are.same("a", tabgroups.tg.k)
+				tabgroups.prev_tab_group() -- to B
+				assert.is_nil(tabgroups.tg.k)
+			end
+		)
 	end)
 
 	-- -------------------------------------------------------------------------
