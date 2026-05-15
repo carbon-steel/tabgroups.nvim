@@ -422,6 +422,11 @@ function M.save_group_vars(filepath, gid)
 	return group_variables.save(gid, filepath)
 end
 
+-- Save an arbitrary vars table to a JSON file, bypassing any tab group's state.
+function M.save_vars(vars, filepath)
+	return group_variables.save_vars(vars, filepath)
+end
+
 -- Load variables for a tab group from a JSON file, replacing existing vars.
 -- gid defaults to the current group when omitted.
 function M.load_group_vars(filepath, gid, on_conflict)

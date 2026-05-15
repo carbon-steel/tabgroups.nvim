@@ -120,7 +120,10 @@ function M.shallow_copy(gid)
 end
 
 function M.save(gid, filepath)
-	local vars = group_vars[gid] or {}
+	return M.save_vars(group_vars[gid] or {}, filepath)
+end
+
+function M.save_vars(vars, filepath)
 	local json = vim.fn.json_encode(vars)
 	local ok, result = pcall(vim.fn.writefile, { json }, filepath)
 	if not ok then

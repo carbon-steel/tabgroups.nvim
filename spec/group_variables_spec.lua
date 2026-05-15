@@ -510,6 +510,22 @@ describe("group_variables", function()
 			end
 		)
 
+		it(
+			"save_vars saves an arbitrary table without touching group state",
+			function()
+				local gid =
+					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+				tabgroups.tg.key = "from_group"
+				assert.is_true(
+					tabgroups.save_vars({ key = "from_arg" }, tmpfile)
+				)
+				assert.are.same("from_group", tabgroups.tg.key)
+				tabgroups.tg.clear(gid)
+				assert.is_true(tabgroups.load_group_vars(tmpfile, gid))
+				assert.are.same("from_arg", tabgroups.tg.key)
+			end
+		)
+
 		it("load returns false for a missing file", function()
 			local ok = tabgroups.load_group_vars("/nonexistent/path.json")
 			assert.is_false(ok)
