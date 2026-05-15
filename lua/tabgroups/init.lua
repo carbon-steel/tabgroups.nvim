@@ -436,6 +436,30 @@ function M.get_group_vars(gid)
 	return group_variables.shallow_copy(gid)
 end
 
+-- List all tab groups, ordered by first tab position.
+-- Each entry is { id = gid, name = string|nil, tabs = { handle, ... } }.
+function M.list_groups()
+	local order = {}
+	local groups = {}
+
+	for _, handle in ipairs(vim.api.nvim_list_tabpages()) do
+		local gid = get_tab_group(handle)
+		local group = groups[gid]
+		if not group then
+			group = { id = gid, name = get_group_name(gid), tabs = {} }
+			groups[gid] = group
+			table.insert(order, gid)
+		end
+		table.insert(group.tabs, handle)
+	end
+
+	local result = {}
+	for _, gid in ipairs(order) do
+		table.insert(result, groups[gid])
+	end
+	return result
+end
+
 -- Return a deep copy of a tab group's variables. gid defaults to current group.
 function M.snapshot(gid)
 	return group_variables.snapshot(gid)

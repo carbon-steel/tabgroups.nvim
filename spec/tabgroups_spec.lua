@@ -461,6 +461,46 @@ describe("tabgroups", function()
 	end)
 
 	-- -------------------------------------------------------------------------
+	-- list_groups
+	-- -------------------------------------------------------------------------
+	describe("list_groups", function()
+		after_each(function()
+			while vim.fn.tabpagenr("$") > 1 do
+				vim.cmd("tabclose $")
+			end
+		end)
+
+		it("returns a single entry when only one group exists", function()
+			local gid =
+				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			local groups = tabgroups.list_groups()
+			assert.are.same(1, #groups)
+			assert.are.same(gid, groups[1].id)
+			assert.is_nil(groups[1].name)
+			assert.are.same(
+				{ vim.api.nvim_get_current_tabpage() },
+				groups[1].tabs
+			)
+		end)
+
+		it(
+			"returns one entry per distinct group, ordered by first tab",
+			function()
+				local tab_a = vim.api.nvim_get_current_tabpage()
+				local gid_a = tabgroups.get_tab_group(tab_a)
+				tabgroups.new_group("B")
+				local gid_b =
+					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+				local groups = tabgroups.list_groups()
+				assert.are.same(2, #groups)
+				assert.are.same(gid_a, groups[1].id)
+				assert.are.same(gid_b, groups[2].id)
+				assert.are.same("B", groups[2].name)
+			end
+		)
+	end)
+
+	-- -------------------------------------------------------------------------
 	-- close_current_group
 	-- -------------------------------------------------------------------------
 	describe("close_current_group", function()
@@ -470,20 +510,23 @@ describe("tabgroups", function()
 			end
 		end)
 
-		it("warns and does not close any tabs when it is the only group", function()
-			vim.cmd("tabnew")
-			local warned = false
-			local orig = vim.notify
-			vim.notify = function(_, level)
-				if level == vim.log.levels.WARN then
-					warned = true
+		it(
+			"warns and does not close any tabs when it is the only group",
+			function()
+				vim.cmd("tabnew")
+				local warned = false
+				local orig = vim.notify
+				vim.notify = function(_, level)
+					if level == vim.log.levels.WARN then
+						warned = true
+					end
 				end
+				tabgroups.close_current_group()
+				vim.notify = orig
+				assert.is_true(warned)
+				assert.are.same(2, vim.fn.tabpagenr("$"))
 			end
-			tabgroups.close_current_group()
-			vim.notify = orig
-			assert.is_true(warned)
-			assert.are.same(2, vim.fn.tabpagenr("$"))
-		end)
+		)
 
 		it("closes all tabs in the current group", function()
 			local tab_a1 = vim.api.nvim_get_current_tabpage()
