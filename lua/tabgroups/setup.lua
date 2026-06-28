@@ -94,9 +94,8 @@ function M.setup(tabgroups, group_vars, internal)
 			-- Save predecessor before clearing the closed tab's entries
 			local pred = last_handle and tab_predecessor[last_handle]
 
-			-- Remove the closed tab's group entry and predecessor record
+			-- Remove the closed tab's predecessor record
 			if last_handle then
-				tabgroups._set_tab_group(last_handle, nil)
 				tab_predecessor[last_handle] = nil
 			end
 

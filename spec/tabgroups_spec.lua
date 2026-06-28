@@ -2,7 +2,7 @@ local tabgroups
 
 describe("tabgroups", function()
 	before_each(function()
-		-- Reload to reset module-level state (group_names, tab_groups tables)
+		-- Reload to reset module-level state (group_names table)
 		package.loaded["tabgroups"] = nil
 		package.loaded["tabgroups.group_variables"] = nil
 		package.loaded["tabgroups.internal"] = nil

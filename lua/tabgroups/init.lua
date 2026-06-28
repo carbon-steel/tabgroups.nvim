@@ -6,9 +6,6 @@ local group_variables = require("tabgroups.group_variables")
 -- Group names: gid -> name (module-level, lives as long as nvim session)
 local group_names = {}
 
--- Tab group assignments: handle -> gid
-local tab_groups = {}
-
 -- Last-visited tab per group: gid -> handle
 local default_tabs = {}
 
@@ -22,24 +19,31 @@ end
 
 -- Generate a unique group ID using a global counter (persists across reloads)
 local function new_group_id()
-	local id = (vim.g.tab_group_counter or 0) + 1
-	vim.g.tab_group_counter = id
+	local id = (vim.g.tabgroup_counter or 0) + 1
+	vim.g.tabgroup_counter = id
 	return id
 end
 
 -- Get group ID for a tab (auto-assigns one if not set)
 local function get_tab_group(handle)
-	local gid = tab_groups[handle]
-	if not gid then
+	local ok, gid = pcall(vim.api.nvim_tabpage_get_var, handle, "tabgroup_id")
+	if not ok or not gid then
 		gid = new_group_id()
-		tab_groups[handle] = gid
+		local set_ok, err = pcall(vim.api.nvim_tabpage_set_var, handle, "tabgroup_id", gid)
+		if not set_ok then
+			vim.notify("tabgroups: failed to assign group to tab: " .. tostring(err), vim.log.levels.ERROR)
+		end
 	end
 	return gid
 end
 
 -- Set group ID for a tab (nil removes the entry)
 local function set_tab_group(handle, gid)
-	tab_groups[handle] = gid
+	if gid then
+		vim.api.nvim_tabpage_set_var(handle, "tabgroup_id", gid)
+	else
+		pcall(vim.api.nvim_tabpage_del_var, handle, "tabgroup_id")
+	end
 end
 
 -- Get the working directory for a given tab (used for display only)
@@ -111,7 +115,8 @@ end
 -- Return the default tab handle for a group if valid and still in that group, else nil
 local function get_default_tab(gid)
 	local handle = default_tabs[gid]
-	if handle
+	if
+		handle
 		and vim.api.nvim_tabpage_is_valid(handle)
 		and get_tab_group(handle) == gid
 	then
@@ -185,7 +190,8 @@ function M.tabline()
 	for i, group in ipairs(groups) do
 		local is_current_group = (group.gid == current_gid)
 		-- Prefer explicit name, fall back to auto-generated name
-		local dir_name = get_group_name(group.gid) or ("Tab Group " .. group.gid)
+		local dir_name = get_group_name(group.gid)
+			or ("Tab Group " .. group.gid)
 
 		-- Add separator before (except for first)
 		if i > 1 then
@@ -200,7 +206,10 @@ function M.tabline()
 		end
 
 		-- Clickable (jumps to first tab in group)
-		s = s .. "%" .. vim.api.nvim_tabpage_get_number(group.first_handle) .. "T"
+		s = s
+			.. "%"
+			.. vim.api.nvim_tabpage_get_number(group.first_handle)
+			.. "T"
 
 		-- Group content
 		s = s .. " " .. dir_name .. " "
@@ -330,8 +339,12 @@ function M.move_current_tab(gid)
 		if group.gid ~= current_gid then
 			table.insert(items, {
 				gid = group.gid,
-				label = get_group_name(group.gid)
-					or get_dir_display_name(get_tab_cwd(vim.api.nvim_tabpage_get_number(group.first_handle)), 40),
+				label = get_group_name(group.gid) or get_dir_display_name(
+					get_tab_cwd(
+						vim.api.nvim_tabpage_get_number(group.first_handle)
+					),
+					40
+				),
 			})
 		end
 	end
@@ -388,7 +401,9 @@ function M.close_current_group()
 	for _, handle in ipairs(tabs) do
 		table.insert(entries, vim.api.nvim_tabpage_get_number(handle))
 	end
-	table.sort(entries, function(a, b) return a > b end)
+	table.sort(entries, function(a, b)
+		return a > b
+	end)
 
 	for _, tabnr in ipairs(entries) do
 		vim.cmd("tabclose " .. tabnr)
@@ -408,10 +423,12 @@ function M.rename_current_group(name)
 	if name then
 		apply(name)
 	else
-		vim.ui.input({ prompt = "Rename group: ", default = current_name }, apply)
+		vim.ui.input(
+			{ prompt = "Rename group: ", default = current_name },
+			apply
+		)
 	end
 end
-
 
 -- Save variables for a tab group to a JSON file.
 -- gid defaults to the current group when omitted.
@@ -474,8 +491,12 @@ end
 M.get_tab_group = get_tab_group
 M._set_tab_group = set_tab_group
 M._new_group_id = new_group_id
-M._set_default_tab = function(gid, handle) default_tabs[gid] = handle end
-M._clear_default_tab = function(gid) default_tabs[gid] = nil end
+M._set_default_tab = function(gid, handle)
+	default_tabs[gid] = handle
+end
+M._clear_default_tab = function(gid)
+	default_tabs[gid] = nil
+end
 
 M.get_group_name = get_group_name
 
