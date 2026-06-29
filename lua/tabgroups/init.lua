@@ -260,7 +260,6 @@ function M.next_tab_group()
 	local groups = get_tab_groups()
 
 	if #groups <= 1 then
-		vim.notify("Only one tab group exists", vim.log.levels.INFO)
 		return
 	end
 
@@ -286,7 +285,6 @@ function M.prev_tab_group()
 	local groups = get_tab_groups()
 
 	if #groups <= 1 then
-		vim.notify("Only one tab group exists", vim.log.levels.INFO)
 		return
 	end
 
