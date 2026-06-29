@@ -2,13 +2,12 @@ local tabgroups
 
 describe("tabgroups", function()
 	before_each(function()
-		-- Reload to reset module-level state (group_names table)
-		package.loaded["tabgroups"] = nil
-		package.loaded["tabgroups.group_variables"] = nil
-		package.loaded["tabgroups.internal"] = nil
-		package.loaded["tabgroups.setup"] = nil
+		for name in pairs(package.loaded) do
+			if vim.startswith(name, "tabgroups") then
+				package.loaded[name] = nil
+			end
+		end
 		tabgroups = require("tabgroups")
-		-- Source the plugin to register autocmds (TabNew, TabEnter, etc.) and tabgroups.tg
 		vim.cmd("source plugin/tabgroups.lua")
 	end)
 
@@ -457,6 +456,28 @@ describe("tabgroups", function()
 			vim.api.nvim_set_current_tabpage(tab6)
 			vim.cmd("tabclose") -- close tab6; should return to tab2
 			assert.are.same(tab2, vim.api.nvim_get_current_tabpage())
+		end)
+
+		it("clears all tab state when a tab is closed", function()
+			local state = require("tabgroups.state")
+			local tab = vim.api.nvim_get_current_tabpage()
+			tabgroups.get_tab_group(tab)
+			vim.cmd("tabnew")
+			vim.api.nvim_set_current_tabpage(tab)
+			assert.is_not_nil(state.tab_get(tab, state.TAB.ID))
+			vim.cmd("tabclose")
+			assert.is_nil(state.tab_get(tab, state.TAB.ID))
+		end)
+
+		it("clears all group state when the last tab of a group is closed", function()
+			local state = require("tabgroups.state")
+			tabgroups.new_group("B")
+			local gid_b =
+				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			state.group_set(gid_b, "custom", "data")
+			vim.cmd("tabclose")
+			assert.is_nil(state.group_get(gid_b, state.GROUP.NAME))
+			assert.is_nil(state.group_get(gid_b, "custom"))
 		end)
 	end)
 

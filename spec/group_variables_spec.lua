@@ -3,12 +3,15 @@ local tabgroups
 describe("group_variables", function()
 	before_each(function()
 		-- Reload to reset module-level state (group_vars, proxies tables)
-		package.loaded["tabgroups"] = nil
-		package.loaded["tabgroups.group_variables"] = nil
-		package.loaded["tabgroups.internal"] = nil
-		package.loaded["tabgroups.setup"] = nil
+		for name in pairs(package.loaded) do
+			if vim.startswith(name, "tabgroups") then
+				package.loaded[name] = nil
+			end
+		end
 		tabgroups = require("tabgroups")
 		vim.cmd("source plugin/tabgroups.lua")
+		-- Ensure the initial tab has tabgroup_id set before any tg access
+		tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 	end)
 
 	after_each(function()
@@ -98,121 +101,72 @@ describe("group_variables", function()
 			local gid =
 				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
 			tabgroups.tg[gid].key = "before"
-			tabgroups.tg.clear(gid)
+			require("tabgroups.state").group_clear(gid)
 			assert.is_nil(tabgroups.tg[gid].key)
 		end)
 	end)
 
 	-- -------------------------------------------------------------------------
-	-- get_group_vars: shallow copy
+	-- key validation
 	-- -------------------------------------------------------------------------
-	describe("get_group_vars", function()
-		it("returns a table with the group's variables", function()
-			tabgroups.tg.a = 1
-			tabgroups.tg.b = "hello"
-			local gid =
-				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-			local snap = tabgroups.get_group_vars(gid)
-			assert.are.same(1, snap.a)
-			assert.are.same("hello", snap.b)
+	describe("key validation", function()
+		it("rejects a numeric string key on tg write", function()
+			assert.has_error(function()
+				tabgroups.tg["1"] = "val"
+			end)
 		end)
 
-		it("defaults to current group when gid is omitted", function()
-			tabgroups.tg.x = "current"
-			local snap = tabgroups.get_group_vars()
-			assert.are.same("current", snap.x)
+		it("rejects a numeric string key on tg read", function()
+			assert.has_error(function()
+				return tabgroups.tg["1"]
+			end)
 		end)
 
-		it("returns an empty table for a group with no variables", function()
-			tabgroups.new_group("empty")
-			local gid =
-				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-			local snap = tabgroups.get_group_vars(gid)
-			assert.are.same({}, snap)
+		it("rejects a bare number key on tg write", function()
+			assert.has_error(function()
+				tabgroups.tg[99] = "val"
+			end)
 		end)
 
-		it("mutations to the copy do not affect the group", function()
-			tabgroups.tg.val = "original"
-			local snap = tabgroups.get_group_vars()
-			snap.val = "mutated"
-			assert.are.same("original", tabgroups.tg.val)
+		it("rejects a float string key on tg write", function()
+			assert.has_error(function()
+				tabgroups.tg["1.5"] = "val"
+			end)
 		end)
 
-		it(
-			"nested tables in the copy are the same reference (shallow copy)",
-			function()
-				tabgroups.tg.nested = { x = 1 }
-				local snap = tabgroups.get_group_vars()
-				assert.are.equal(snap.nested, tabgroups.tg.nested)
-			end
-		)
-
-		it("does not include variables from other groups", function()
-			local gid1 =
-				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-			tabgroups.tg.only_in_1 = true
-			tabgroups.new_group("other")
-			tabgroups.tg.only_in_2 = true
-			local snap = tabgroups.get_group_vars(gid1)
-			assert.is_true(snap.only_in_1)
-			assert.is_nil(snap.only_in_2)
-		end)
-	end)
-
-	-- -------------------------------------------------------------------------
-	-- snapshot: deep copy
-	-- -------------------------------------------------------------------------
-	describe("snapshot", function()
-		it("returns a table with the group's variables", function()
-			tabgroups.tg.a = 1
-			tabgroups.tg.b = "hello"
-			local gid =
-				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-			local snap = tabgroups.snapshot(gid)
-			assert.are.same(1, snap.a)
-			assert.are.same("hello", snap.b)
+		it("rejects a numeric string key on addressed group write", function()
+			local gid = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			assert.has_error(function()
+				tabgroups.tg[gid]["1"] = "val"
+			end)
 		end)
 
-		it("defaults to current group when gid is omitted", function()
-			tabgroups.tg.x = "current"
-			local snap = tabgroups.snapshot()
-			assert.are.same("current", snap.x)
+		it("rejects a numeric string key on addressed group read", function()
+			local gid = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			assert.has_error(function()
+				return tabgroups.tg[gid]["1"]
+			end)
 		end)
 
-		it("returns an empty table for a group with no variables", function()
-			tabgroups.new_group("empty")
-			local gid =
-				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-			local snap = tabgroups.snapshot(gid)
-			assert.are.same({}, snap)
+		it("rejects a bare number key on addressed group write", function()
+			local gid = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			assert.has_error(function()
+				tabgroups.tg[gid][99] = "val"
+			end)
 		end)
 
-		it("mutations to the copy do not affect the group", function()
-			tabgroups.tg.val = "original"
-			local snap = tabgroups.snapshot()
-			snap.val = "mutated"
-			assert.are.same("original", tabgroups.tg.val)
+		it("rejects a bare number key on addressed group read", function()
+			local gid = tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
+			assert.has_error(function()
+				return tabgroups.tg[gid][99]
+			end)
 		end)
 
-		it(
-			"mutations to nested tables in the copy do not affect the group",
-			function()
-				tabgroups.tg.nested = { x = 1 }
-				local snap = tabgroups.snapshot()
-				snap.nested.x = 99
-				assert.are.same(1, tabgroups.tg.nested.x)
-			end
-		)
-
-		it("does not include variables from other groups", function()
-			local gid1 =
-				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-			tabgroups.tg.only_in_1 = true
-			tabgroups.new_group("other")
-			tabgroups.tg.only_in_2 = true
-			local snap = tabgroups.snapshot(gid1)
-			assert.is_true(snap.only_in_1)
-			assert.is_nil(snap.only_in_2)
+		it("accepts a plain string key", function()
+			assert.has_no.errors(function()
+				tabgroups.tg.foo = "bar"
+				return tabgroups.tg.foo
+			end)
 		end)
 	end)
 
@@ -305,7 +259,7 @@ describe("group_variables", function()
 				tabgroups.tg.k = "b"
 				local gid_b =
 					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-				tabgroups.tg.clear(gid_b)
+				require("tabgroups.state").group_clear(gid_b)
 				tabgroups.prev_tab_group() -- back to A
 				assert.are.same("a", tabgroups.tg.k)
 				tabgroups.prev_tab_group() -- to B
@@ -314,227 +268,4 @@ describe("group_variables", function()
 		)
 	end)
 
-	-- -------------------------------------------------------------------------
-	-- save_group_vars / load_group_vars: persist and restore variables
-	-- -------------------------------------------------------------------------
-	describe("save_group_vars / load_group_vars", function()
-		local tmpfile
-
-		before_each(function()
-			tmpfile = vim.fn.tempname() .. ".json"
-		end)
-
-		after_each(function()
-			vim.fn.delete(tmpfile)
-		end)
-
-		it(
-			"restores variables to the current group after save and clear",
-			function()
-				tabgroups.tg.key1 = "val1"
-				tabgroups.tg.key2 = 42
-				tabgroups.tg.key3 = true
-				tabgroups.tg.key4 = { "a", "b", "c" }
-				tabgroups.tg.key5 = { x = 1, y = 2 }
-				local gid =
-					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-				assert.is_true(tabgroups.save_group_vars(tmpfile, gid))
-				tabgroups.tg.clear(gid)
-				assert.is_true(tabgroups.load_group_vars(tmpfile, gid))
-				assert.are.same("val1", tabgroups.tg.key1)
-				assert.are.same(42, tabgroups.tg.key2)
-				assert.are.same(true, tabgroups.tg.key3)
-				assert.are.same({ "a", "b", "c" }, tabgroups.tg.key4)
-				assert.are.same({ x = 1, y = 2 }, tabgroups.tg.key5)
-			end
-		)
-
-		it(
-			"save defaults to current group; load restores the same variables",
-			function()
-				tabgroups.tg.project = "myproject"
-				local gid =
-					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-				assert.is_true(tabgroups.save_group_vars(tmpfile))
-				tabgroups.tg.clear(gid)
-				assert.is_true(tabgroups.load_group_vars(tmpfile))
-				assert.are.same("myproject", tabgroups.tg.project)
-			end
-		)
-
-		it(
-			"with a conflict handler, the handler resolves key conflicts",
-			function()
-				local gid =
-					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-				tabgroups.tg.key = "from_file"
-				assert.is_true(tabgroups.save_group_vars(tmpfile, gid))
-				tabgroups.tg.key = "existing"
-				assert.is_true(
-					tabgroups.load_group_vars(
-						tmpfile,
-						gid,
-						function(_, existing, _)
-							return existing
-						end
-					)
-				)
-				assert.are.same("existing", tabgroups.tg.key)
-			end
-		)
-
-		it(
-			"conflict handler returning the incoming value overwrites the existing one",
-			function()
-				local gid =
-					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-				tabgroups.tg.key = "from_file"
-				assert.is_true(tabgroups.save_group_vars(tmpfile, gid))
-				tabgroups.tg.key = "existing"
-				assert.is_true(
-					tabgroups.load_group_vars(
-						tmpfile,
-						gid,
-						function(_, _, incoming)
-							return incoming
-						end
-					)
-				)
-				assert.are.same("from_file", tabgroups.tg.key)
-			end
-		)
-
-		it("conflict handler can combine numeric values", function()
-			local gid =
-				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-			tabgroups.tg.count = 3
-			assert.is_true(tabgroups.save_group_vars(tmpfile, gid))
-			tabgroups.tg.count = 10
-			assert.is_true(
-				tabgroups.load_group_vars(
-					tmpfile,
-					gid,
-					function(_, existing, incoming)
-						return existing + incoming
-					end
-				)
-			)
-			assert.are.same(13, tabgroups.tg.count)
-		end)
-
-		it("conflict handler receives the correct key name", function()
-			local gid =
-				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-			tabgroups.tg.alpha = 1
-			tabgroups.tg.beta = 2
-			assert.is_true(tabgroups.save_group_vars(tmpfile, gid))
-			local seen_keys = {}
-			assert.is_true(
-				tabgroups.load_group_vars(
-					tmpfile,
-					gid,
-					function(key, existing, _)
-						seen_keys[key] = existing
-						return existing
-					end
-				)
-			)
-			assert.are.same(1, seen_keys.alpha)
-			assert.are.same(2, seen_keys.beta)
-		end)
-
-		it(
-			"conflict handler is not called for keys only in the file",
-			function()
-				local gid =
-					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-				tabgroups.tg.file_only = "yes"
-				assert.is_true(tabgroups.save_group_vars(tmpfile, gid))
-				tabgroups.tg.clear(gid)
-				local handler_called = false
-				assert.is_true(
-					tabgroups.load_group_vars(
-						tmpfile,
-						gid,
-						function(_, existing, incoming)
-							handler_called = true
-							return incoming
-						end
-					)
-				)
-				assert.is_false(handler_called)
-				assert.are.same("yes", tabgroups.tg.file_only)
-			end
-		)
-
-		it(
-			"saves and restores variables for a non-current group by gid",
-			function()
-				local gid1 =
-					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-				tabgroups.tg.project = "group1"
-				tabgroups.new_group("other")
-				tabgroups.tg.project = "group2"
-				assert.is_true(tabgroups.save_group_vars(tmpfile, gid1))
-				tabgroups.tg.clear(gid1)
-				assert.is_true(tabgroups.load_group_vars(tmpfile, gid1))
-				assert.are.same("group1", tabgroups.tg[gid1].project)
-				assert.are.same("group2", tabgroups.tg.project)
-			end
-		)
-
-		it("load replaces existing variables with saved ones", function()
-			local gid =
-				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-			tabgroups.tg.key = "saved"
-			assert.is_true(tabgroups.save_group_vars(tmpfile, gid))
-			tabgroups.tg.key = "overwritten"
-			assert.is_true(tabgroups.load_group_vars(tmpfile, gid))
-			assert.are.same("saved", tabgroups.tg.key)
-		end)
-
-		it(
-			"load does not clear variables not present in the saved file",
-			function()
-				local gid1 =
-					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-				tabgroups.tg.unrelated = "yes"
-				-- Save a different group that has only "kept"
-				tabgroups.new_group("source")
-				tabgroups.tg.kept = "yes"
-				assert.is_true(tabgroups.save_group_vars(tmpfile))
-				-- Load it into gid1, which has "unrelated" but not "kept"
-				assert.is_true(tabgroups.load_group_vars(tmpfile, gid1))
-				assert.are.same("yes", tabgroups.tg[gid1].unrelated)
-				assert.are.same("yes", tabgroups.tg[gid1].kept)
-			end
-		)
-
-		it(
-			"save_vars saves an arbitrary table without touching group state",
-			function()
-				local gid =
-					tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-				tabgroups.tg.key = "from_group"
-				assert.is_true(
-					tabgroups.save_vars({ key = "from_arg" }, tmpfile)
-				)
-				assert.are.same("from_group", tabgroups.tg.key)
-				tabgroups.tg.clear(gid)
-				assert.is_true(tabgroups.load_group_vars(tmpfile, gid))
-				assert.are.same("from_arg", tabgroups.tg.key)
-			end
-		)
-
-		it("load returns false for a missing file", function()
-			local ok = tabgroups.load_group_vars("/nonexistent/path.json")
-			assert.is_false(ok)
-		end)
-
-		it("load returns false for invalid JSON", function()
-			vim.fn.writefile({ "not json" }, tmpfile)
-			local ok = tabgroups.load_group_vars(tmpfile)
-			assert.is_false(ok)
-		end)
-	end)
 end)

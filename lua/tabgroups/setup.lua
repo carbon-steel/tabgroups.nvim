@@ -1,9 +1,8 @@
+local state = require("tabgroups.state")
 local M = {}
 
 function M.setup(tabgroups, group_vars, internal)
-	tabgroups.tg = group_vars.make_proxy(function()
-		return tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-	end)
+	tabgroups.tg = group_vars.make_proxy()
 
 	vim.api.nvim_create_user_command("TabGroupMove", function()
 		tabgroups.move_current_tab()
@@ -33,9 +32,6 @@ function M.setup(tabgroups, group_vars, internal)
 	local last_group_id = nil
 	local last_handle = nil
 
-	-- Maps tab handle → the tab that navigated to it (most recent)
-	local tab_predecessor = {}
-
 	-- Refresh tabline when tab layout changes
 	vim.api.nvim_create_autocmd(
 		{ "DirChanged", "TabEnter", "TabNew", "TabClosed" },
@@ -56,7 +52,7 @@ function M.setup(tabgroups, group_vars, internal)
 			local gid = tabgroups.get_tab_group(handle)
 			tabgroups._set_default_tab(gid, handle)
 			if last_handle and last_handle ~= handle then
-				tab_predecessor[handle] = last_handle
+				state.tab_set(handle, state.TAB.PREDECESSOR, last_handle)
 			end
 			if last_group_id and last_group_id ~= gid then
 				vim.api.nvim_exec_autocmds("User", {
@@ -87,16 +83,80 @@ function M.setup(tabgroups, group_vars, internal)
 		end,
 	})
 
+	-- Session persistence for plugin state
+	vim.api.nvim_create_autocmd("SessionWritePost", {
+		group = augroup,
+		callback = function()
+			local lines = {}
+			for _, handle in ipairs(vim.api.nvim_list_tabpages()) do
+				local tabnr = vim.api.nvim_tabpage_get_number(handle)
+				local tab_s = state.tab_all()[handle]
+				if tab_s then
+					for k, v in pairs(tab_s) do
+						table.insert(
+							lines,
+							string.format(
+								"call luaeval(\"require('tabgroups.state').restore_tab(%d, %s, _A)\", %s)",
+								tabnr,
+								vim.fn.string(k),
+								vim.fn.string(v)
+							)
+						)
+					end
+				end
+			end
+			for gid, s in pairs(state.group_all()) do
+				for k, v in pairs(s) do
+					if k == state.GROUP.DEFAULT_TAB then
+						if vim.api.nvim_tabpage_is_valid(v) then
+							table.insert(
+								lines,
+								string.format(
+									"call luaeval(\"require('tabgroups.state').restore_group_default_tab(%d, _A)\", %d)",
+									gid,
+									vim.api.nvim_tabpage_get_number(v)
+								)
+							)
+						end
+					else
+						table.insert(
+							lines,
+							string.format(
+								"call luaeval(\"require('tabgroups.state').restore_group(%d, %s, _A)\", %s)",
+								gid,
+								vim.fn.string(k),
+								vim.fn.string(v)
+							)
+						)
+					end
+				end
+			end
+			for k, v in pairs(state.global_all()) do
+				table.insert(
+					lines,
+					string.format(
+						"call luaeval(\"require('tabgroups.state').global_set(%s, _A)\", %s)",
+						vim.fn.string(k),
+						vim.fn.string(v)
+					)
+				)
+			end
+			if #lines > 0 then
+				table.insert(lines, "lua vim.cmd('redrawtabline')")
+				vim.fn.writefile(lines, vim.v.this_session, "a")
+			end
+		end,
+	})
+
 	-- After a tab closes, stay in the same group
 	vim.api.nvim_create_autocmd("TabClosed", {
 		group = augroup,
 		callback = function()
 			-- Save predecessor before clearing the closed tab's entries
-			local pred = last_handle and tab_predecessor[last_handle]
+			local pred = last_handle and state.tab_get(last_handle, state.TAB.PREDECESSOR)
 
-			-- Remove the closed tab's predecessor record
 			if last_handle then
-				tab_predecessor[last_handle] = nil
+				state.tab_clear(last_handle)
 			end
 
 			if not last_group_id then
@@ -142,7 +202,7 @@ function M.setup(tabgroups, group_vars, internal)
 					},
 				})
 				tabgroups._clear_default_tab(last_group_id)
-				tabgroups.tg.clear(last_group_id)
+				state.group_clear(last_group_id)
 			end
 		end,
 	})

@@ -2,37 +2,28 @@
 local M = {}
 local internal = require("tabgroups.internal")
 local group_variables = require("tabgroups.group_variables")
-
--- Group names: gid -> name (module-level, lives as long as nvim session)
-local group_names = {}
-
--- Last-visited tab per group: gid -> handle
-local default_tabs = {}
+local state = require("tabgroups.state")
 
 local function get_group_name(gid)
-	return group_names[gid]
+	return state.group_get(gid, state.GROUP.NAME)
 end
 
 local function set_group_name(gid, name)
-	group_names[gid] = name
+	state.group_set(gid, state.GROUP.NAME, name)
 end
 
--- Generate a unique group ID using a global counter (persists across reloads)
 local function new_group_id()
-	local id = (vim.g.tabgroup_counter or 0) + 1
-	vim.g.tabgroup_counter = id
+	local id = (state.global_get(state.GLOBAL.COUNTER) or 0) + 1
+	state.global_set(state.GLOBAL.COUNTER, id)
 	return id
 end
 
 -- Get group ID for a tab (auto-assigns one if not set)
 local function get_tab_group(handle)
-	local ok, gid = pcall(vim.api.nvim_tabpage_get_var, handle, "tabgroup_id")
-	if not ok or not gid then
+	local gid = state.tab_get(handle, state.TAB.ID)
+	if not gid then
 		gid = new_group_id()
-		local set_ok, err = pcall(vim.api.nvim_tabpage_set_var, handle, "tabgroup_id", gid)
-		if not set_ok then
-			vim.notify("tabgroups: failed to assign group to tab: " .. tostring(err), vim.log.levels.ERROR)
-		end
+		state.tab_set(handle, state.TAB.ID, gid)
 	end
 	return gid
 end
@@ -40,9 +31,9 @@ end
 -- Set group ID for a tab (nil removes the entry)
 local function set_tab_group(handle, gid)
 	if gid then
-		vim.api.nvim_tabpage_set_var(handle, "tabgroup_id", gid)
+		state.tab_set(handle, state.TAB.ID, gid)
 	else
-		pcall(vim.api.nvim_tabpage_del_var, handle, "tabgroup_id")
+		state.tab_del(handle, state.TAB.ID)
 	end
 end
 
@@ -114,7 +105,7 @@ end
 
 -- Return the default tab handle for a group if valid and still in that group, else nil
 local function get_default_tab(gid)
-	local handle = default_tabs[gid]
+	local handle = state.group_get(gid, state.GROUP.DEFAULT_TAB)
 	if
 		handle
 		and vim.api.nvim_tabpage_is_valid(handle)
@@ -430,34 +421,6 @@ function M.rename_current_group(name)
 	end
 end
 
--- Save variables for a tab group to a JSON file.
--- gid defaults to the current group when omitted.
-function M.save_group_vars(filepath, gid)
-	if not gid then
-		gid = get_tab_group(vim.api.nvim_get_current_tabpage())
-	end
-	return group_variables.save(gid, filepath)
-end
-
--- Save an arbitrary vars table to a JSON file, bypassing any tab group's state.
-function M.save_vars(vars, filepath)
-	return group_variables.save_vars(vars, filepath)
-end
-
--- Load variables for a tab group from a JSON file, replacing existing vars.
--- gid defaults to the current group when omitted.
-function M.load_group_vars(filepath, gid, on_conflict)
-	if not gid then
-		gid = get_tab_group(vim.api.nvim_get_current_tabpage())
-	end
-	return group_variables.load(gid, filepath, on_conflict)
-end
-
--- Return a shallow copy of a tab group's variables. gid defaults to current group.
-function M.get_group_vars(gid)
-	return group_variables.shallow_copy(gid)
-end
-
 -- List all tab groups, ordered by first tab position.
 -- Each entry is { id = gid, name = string|nil, tabs = { handle, ... } }.
 function M.list_groups()
@@ -482,20 +445,15 @@ function M.list_groups()
 	return result
 end
 
--- Return a deep copy of a tab group's variables. gid defaults to current group.
-function M.snapshot(gid)
-	return group_variables.snapshot(gid)
-end
-
 -- Internal functions used by plugin/tabgroups.lua (prefixed to signal non-public API)
 M.get_tab_group = get_tab_group
 M._set_tab_group = set_tab_group
 M._new_group_id = new_group_id
 M._set_default_tab = function(gid, handle)
-	default_tabs[gid] = handle
+	state.group_set(gid, state.GROUP.DEFAULT_TAB, handle)
 end
 M._clear_default_tab = function(gid)
-	default_tabs[gid] = nil
+	state.group_del(gid, state.GROUP.DEFAULT_TAB)
 end
 
 M.get_group_name = get_group_name
