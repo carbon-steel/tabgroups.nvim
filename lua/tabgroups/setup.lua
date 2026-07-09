@@ -51,9 +51,6 @@ function M.setup(tabgroups, group_vars, internal)
 			local handle = vim.api.nvim_get_current_tabpage()
 			local gid = tabgroups.get_tab_group(handle)
 			tabgroups._set_default_tab(gid, handle)
-			if last_handle and last_handle ~= handle then
-				state.tab_set(handle, state.TAB.PREDECESSOR, last_handle)
-			end
 			if last_group_id and last_group_id ~= gid then
 				vim.api.nvim_exec_autocmds("User", {
 					pattern = "TabGroupEnter",
@@ -152,9 +149,6 @@ function M.setup(tabgroups, group_vars, internal)
 	vim.api.nvim_create_autocmd("TabClosed", {
 		group = augroup,
 		callback = function()
-			-- Save predecessor before clearing the closed tab's entries
-			local pred = last_handle and state.tab_get(last_handle, state.TAB.PREDECESSOR)
-
 			if last_handle then
 				state.tab_clear(last_handle)
 			end
@@ -163,47 +157,23 @@ function M.setup(tabgroups, group_vars, internal)
 				return
 			end
 
-			local current_gid =
-				tabgroups.get_tab_group(vim.api.nvim_get_current_tabpage())
-
-			if current_gid == last_group_id then
-				-- Same group: return to the tab we navigated from, if still valid
-				if
-					pred
-					and vim.api.nvim_tabpage_is_valid(pred)
-					and tabgroups.get_tab_group(pred) == last_group_id
-				then
-					vim.api.nvim_set_current_tabpage(pred)
-				end
-				return
-			end
-
 			for _, handle in ipairs(vim.api.nvim_list_tabpages()) do
 				if tabgroups.get_tab_group(handle) == last_group_id then
 					vim.api.nvim_set_current_tabpage(handle)
-					break
+					return
 				end
 			end
 
-			-- Clear state when the last tab of a group closes
-			local group_still_exists = false
-			for _, handle in ipairs(vim.api.nvim_list_tabpages()) do
-				if tabgroups.get_tab_group(handle) == last_group_id then
-					group_still_exists = true
-					break
-				end
-			end
-			if not group_still_exists then
-				vim.api.nvim_exec_autocmds("User", {
-					pattern = "TabGroupClosed",
-					data = {
-						id = last_group_id,
-						name = tabgroups.get_group_name(last_group_id),
-					},
-				})
-				tabgroups._clear_default_tab(last_group_id)
-				state.group_clear(last_group_id)
-			end
+			-- No tabs remain in the group: clean up its state
+			vim.api.nvim_exec_autocmds("User", {
+				pattern = "TabGroupClosed",
+				data = {
+					id = last_group_id,
+					name = tabgroups.get_group_name(last_group_id),
+				},
+			})
+			tabgroups._clear_default_tab(last_group_id)
+			state.group_clear(last_group_id)
 		end,
 	})
 end

@@ -1,6 +1,6 @@
 local M = {}
 
-M.TAB = { ID = 1, PREDECESSOR = 2 }
+M.TAB = { ID = 1 }
 M.GROUP = { NAME = 1, DEFAULT_TAB = 2 }
 M.GLOBAL = { COUNTER = 1 }
 
